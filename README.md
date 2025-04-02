@@ -1,4 +1,7 @@
-# SOF-IA: Asistente de Inteligencia Artificial Médica
+
+ # SOF-IA: Asistente de Inteligencia Artificial Médica
+![Logo SOF-IA](https://github.com/user-attachments/assets/47933f0a-6f45-475b-b312-8372fa85eb08)
+
 
 El propósito de este modelo es servir como un valioso apoyo para los profesionales médicos, optimizando el tiempo necesario para realizar diagnósticos, analizar radiografías e interpretar imágenes diagnósticas. Además, ofrece diversas opciones de interacción adaptadas a las necesidades del usuario:
 
