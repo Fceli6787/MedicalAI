@@ -2,21 +2,115 @@
  # SOF-IA: Asistente de Inteligencia Artificial Médica
 ![Logo SOF-IA](https://github.com/user-attachments/assets/47933f0a-6f45-475b-b312-8372fa85eb08)
 
-# Propósito del Modelo
+Un asistente de IA diseñado para apoyar a los profesionales médicos en diagnósticos, análisis de radiografías e interpretación de imágenes diagnósticas.
 
-El propósito de este modelo es servir como un valioso apoyo para los profesionales médicos, optimizando el tiempo necesario para realizar diagnósticos, analizar radiografías e interpretar imágenes diagnósticas. Además, ofrece diversas opciones de interacción adaptadas a las necesidades del usuario:
+## 💡 Propósito
 
-- **Audio**: Permite interactuar con el modelo en tiempo real mediante un sistema de reconocimiento y respuesta por voz, simulando una conversación con un médico.
-- **Texto**: Ofrece una interfaz gráfica intuitiva que facilita la interacción escrita, similar a herramientas como ChatGPT, Gemini y Grok.
+Este modelo está diseñado para ofrecer un valioso apoyo a los profesionales médicos, optimizando el tiempo necesario para realizar diagnósticos, analizar radiografías e interpretar imágenes diagnósticas. Proporciona diversas opciones de interacción adaptadas a las necesidades del usuario:
 
-## Recursos Necesarios para el Desarrollo del Proyecto
+*   **Audio 🎤:** Sistema de reconocimiento y respuesta por voz que permite interactuar en tiempo real, simulando una conversación con un médico.
+*   **Texto ⌨️:** Interfaz gráfica intuitiva que facilita la interacción escrita, similar a herramientas como ChatGPT, Gemini y Grok.
 
-Para implementar el proyecto, es necesario integrar las siguientes tecnologías:
+---
 
-- **React**: Será utilizado en el desarrollo del frontend, asegurando una interfaz de usuario moderna, dinámica e interactiva.
-- **Node.js**: Este entorno se empleará para el desarrollo del backend. Permitirá implementar funcionalidades clave como el inicio de sesión y la autenticación de usuarios, aprovechando su naturaleza orientada a eventos.
-- **CSS**: Responsable del diseño visual (frontend), asegurando una interfaz atractiva y funcional para que el usuario interactúe con el chatbot.
-- **API de OpenRouter.ai**: Esta API será utilizada para procesar las solicitudes del usuario, empleando el modelo **Gemini 2.0 Flash Thinking**, previamente entrenado específicamente para el área de Medicina y Salud. Este modelo cuenta con **capacidades avanzadas de razonamiento y solución de problemas**, haciéndolo ideal para ser un asistente médico efectivo.
-- **MySQL**: Un sistema de gestión de bases de datos que almacenará la información del usuario, incluyendo correo electrónico, nombre, chats archivados y tipo de inicio de sesión (local o mediante Firebase).
-- **Firebase**: La herramienta de Google que se utilizará para la autenticación a través de cuentas de Google. Esta tecnología simplificará el proceso de inicio de sesión y ofrecerá una experiencia segura y confiable.
+## 🛠️ Tecnologías Implementadas
 
+Para garantizar el éxito del desarrollo y una experiencia excepcional, este proyecto integra las siguientes tecnologías:
+
+### 💻 Frontend
+
+*   **React:** Framework para desarrollar una interfaz de usuario moderna, interactiva y dinámica.
+    ```bash
+    npm install react react-dom
+    ```
+*   **CSS:** Encargado del diseño visual, asegurando una experiencia atractiva y funcional para los usuarios.
+
+### ⚙️ Backend
+
+*   **Node.js:** Entorno de desarrollo orientado a eventos, usado para implementar funcionalidades clave como inicio de sesión y autenticación de usuarios.
+    ```bash
+    npm install express
+    ```
+*   **API de OpenRouter.ai:** Utiliza el modelo **Gemini 2.0 Flash Thinking**, previamente entrenado específicamente para el área de Medicina y Salud. Este modelo cuenta con **capacidades avanzadas de razonamiento y solución de problemas**, haciéndolo ideal para ser un asistente médico efectivo.
+
+### 🗄️ Gestión de Datos
+
+*   **MySQL:** Sistema de gestión de bases de datos encargado de almacenar información de los usuarios, como correo electrónico, nombre, chats archivados y tipo de inicio de sesión (local o mediante Firebase).
+    *   La base de datos debe cargarse previamente desde el archivo `sofia/database.sql` mediante el shell de **XAMPP**.
+        ```bash
+        mysql -u root -p < ruta-a-sofia/database.sql
+        ```
+*   **Firebase:** Herramienta utilizada para la autenticación mediante cuentas de Google, brindando una experiencia segura y simplificada.
+    ```bash
+    npm install firebase
+    ```
+
+---
+
+### ✨ Características del Modelo Gemini 2.0 Flash Thinking Experimental
+
+# 🎯 Orientación Específica (System Instructions para Medicina y Salud)
+
+A través de system instructions, el modelo Gemini 2.0 puede ser guiado específicamente para áreas como Medicina y Salud. Estas instrucciones definen cómo debe comportarse y responder dentro de este contexto, asegurando que las respuestas sean adaptadas y extremadamente precisas, basándose en conocimientos médicos relevantes y actualizados hasta el año 2025. Esto lo convierte en una herramienta ideal para profesionales de la salud que requieren diagnósticos o soluciones basadas en información científica confiable.
+
+*   **🧠 Razonamiento Avanzado:**  
+    Este modelo experimental está diseñado para ofrecer capacidades superiores de análisis, solución de problemas y toma de decisiones en contextos complejos, como los médicos. Su rendimiento es eficiente y rápido, lo que permite abordar situaciones críticas con precisión y agilidad.
+
+*   **🖼️ Multimodalidad (Procesamiento de Imágenes y PDF):**  
+    Una de las principales ventajas de Gemini 2.0 Flash Thinking Experimental es su capacidad multimodal. Puede procesar no solo texto, sino también imágenes, videos y datos de audio. Además, ha sido mejorado para interpretar y extraer información relevante de documentos PDF, lo que amplía enormemente su utilidad en entornos profesionales donde se manejan informes técnicos, artículos científicos y gráficos médicos.
+
+*   **📈 Escalabilidad:**  
+    El modelo está diseñado para funcionar eficientemente incluso bajo cargas pesadas. Puede manejar múltiples solicitudes simultáneas sin comprometer la velocidad ni la estabilidad del sistema. Esta característica es crucial para aplicaciones clínicas o industriales donde el tiempo de respuesta es esencial.
+
+*   **🌐 Capacidades Multilingües:**  
+    Aunque no se menciona explícitamente en los datos recopilados, dado que Google ha desarrollado modelos previos con soporte multilingüe, podemos inferir que Gemini 2.0 Flash Thinking Experimental probablemente ofrezca compatibilidad con varios idiomas, facilitando su uso global.
+
+*   **🔒 Privacidad y Seguridad:**  
+    Al utilizar este modelo, los usuarios tienen la opción de elegir entre respuestas más precisas asumiendo cierto acceso a datos personales o históricos previos. Esto destaca la importancia de la privacidad en su diseño, aunque siempre debe usarse con precaución según las necesidades del usuario.
+
+---
+
+## 🚀 Instalación y Configuración
+
+Sigue estos pasos para poner en marcha el proyecto:
+
+1.  **Clonar el repositorio:**
+
+    ```bash
+    git clone https://github.com/Fceli6787/MedicalAI/
+    ```
+2.  **Instalar dependencias:**
+
+    ```bash
+    npm install
+    ```
+3.  **Configurar la base de datos:**
+
+    *   Asegúrate de que **XAMPP** esté ejecutándose.
+    *   Carga el archivo de base de datos ubicado en `sofia/database.sql` en MySQL utilizando el shell de **XAMPP**:
+
+        ```bash
+        mysql -u root -p < ruta-a-sofia/database.sql
+        ```
+4.  **Configurar las variables de entorno:**
+
+    *   El proyecto incluye dos archivos `.env`:
+        *   **Frontend:** El archivo `.env` se encuentra en la carpeta `sofia`. Modifica las credenciales según tu configuración.
+        *   **Backend:** El archivo `.env` correspondiente está en la raíz del backend. También deberá ser modificado con las credenciales adecuadas.
+5.  **Ejecutar el servidor:**
+
+    ```bash
+    npm start
+    ```
+
+---
+
+## 👥 Integrantes del Proyecto
+
+*   **Recursos Humanos QA:** Cristian Zabala
+*   **Arquitecto:** Marlon González
+*   **Project Leader:** Jaider Rodríguez
+*   **Desarrolladores:** Andres Urbina, Juan Blanco, Michael Romero
+*   **Frontend:** Andres Celi
+*   **SCRUM MASTER:** María Murcia
+*   **Backend:** Jheison Sosa
