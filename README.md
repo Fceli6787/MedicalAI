@@ -107,7 +107,7 @@ Sigue estos pasos para poner en marcha el proyecto:
 
 ## 👥 Integrantes del Proyecto
 
-*   **Recursos Humanos QA:** Cristian Zabala
+*   **QA:** Cristian Zabala
 *   **Arquitecto:** Marlon González
 *   **Project Leader:** Jaider Rodríguez
 *   **Desarrolladores:** Andres Urbina, Juan Blanco, Michael Romero
