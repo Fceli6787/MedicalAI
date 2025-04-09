@@ -1,0 +1,8 @@
+{
+    "name": "Node.js Environment",
+    "features": {
+      "node": {
+        "version": "lts"
+      }
+    }
+  }
