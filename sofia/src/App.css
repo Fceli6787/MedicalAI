@@ -1,0 +1,224 @@
+:root {
+  /* Paleta de colores natural */
+  --primary-color: #4a6fa5;    /* Azul médico suave */
+  --secondary-color: #58b2ac;  /* Verde agua relajante */
+  --accent-color: #7e6b8f;     /* Púrpura suave */
+  --accent-light: #a4d4e6;     /* Celeste suave */
+  --text-color: #4a4a4a;       /* Gris oscuro suave */
+  --light-text: #f8f9fa;       /* Blanco suave */
+  --background: #f5f7fa;       /* Fondo gris muy claro */
+
+  /* Gradientes */
+  --gradient-tech: linear-gradient(135deg, var(--accent-color) 0%, var(--primary-color) 100%);
+  --gradient-medical: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  --glow-tech: 0 0 10px rgba(126, 107, 143, 0.5);
+  
+  /* Variables de diseño */
+  --header-height: 60px;
+  --sidebar-width: 280px;
+  --border-radius: 8px;
+  
+  /* Sombras suaves */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05);
+  
+  /* Transiciones suaves */
+  --transition-fast: all 0.3s ease;
+  --transition-normal: all 0.5s ease;
+}
+
+/* Estilos base */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+body {
+  font-family: 'Outfit', sans-serif;
+  color: var(--text-color);
+  background-color: var(--background);
+  line-height: 1.6;
+  transition: var(--transition-normal);
+}
+
+/* Layout principal */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.main-content {
+  display: flex;
+  flex-grow: 1;
+  overflow: hidden;
+  margin-left: var(--sidebar-width);
+}
+
+.chat-section {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--header-height));
+}
+
+.chat-area-container {
+  flex-grow: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Importación de fuentes */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Fira+Code&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
+
+/* Utilidades */
+.hidden {
+  display: none !important;
+}
+
+/* Estilos de scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(74, 111, 165, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent-color);
+  border-radius: 4px;
+  transition: var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-color);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Estilos de componentes base */
+button, input, textarea, select {
+  transition: var(--transition-fast);
+  outline: none;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--border-radius);
+  padding: 0.5rem 1rem;
+}
+
+button:focus, input:focus, textarea:focus, select:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+/* Animaciones */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.tech-glow {
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+/* Modo oscuro */
+.dark {
+  --primary-color: #5d7fa5;    /* Azul más suave */
+  --secondary-color: #65a5a0;  /* Verde agua más oscuro */
+  --accent-color: #8f7e9e;     /* Púrpura más oscuro */
+  --accent-light: #88b8d4;     /* Celeste más oscuro */
+  --text-color: #e0e0e0;       /* Gris claro */
+  --light-text: #f0f0f0;       /* Blanco menos brillante */
+  --background: #2d3339;       /* Fondo oscuro más cálido */
+}
+
+/* Estilos específicos del modo oscuro */
+.dark .sidebar {
+  background: linear-gradient(135deg, #3a4654, #2d3339);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dark .header {
+  background: linear-gradient(135deg, #3a4654, #2d3339);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dark .input-box {
+  background: rgba(45, 51, 57, 0.9);
+  border-color: rgba(143, 126, 158, 0.3);
+  color: var(--light-text);
+}
+
+.dark .chat-item {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-color);
+}
+
+.dark .bot-message {
+  background: linear-gradient(to bottom right, #3a4654, #2d3339);
+  color: var(--light-text);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dark .user-message {
+  background: linear-gradient(to bottom right, #5d7fa5, #65a5a0);
+  color: var(--light-text);
+}
+
+.dark button {
+  background-color: #3a4654;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--light-text);
+}
+
+.dark button:hover {
+  background-color: #4a5568;
+}
+
+.dark input, .dark textarea {
+  background-color: #3a4654;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--light-text);
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--accent-color);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-color);
+}
+
+/* Logo switching for dark mode */
+.dark .header-logo,
+.dark .sidebar-logo-img {
+  display: none !important;
+}
+
+.dark .header-logo-dark,
+.dark .sidebar-logo-img-dark {
+  display: block !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 0;
+  }
+  
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform var(--transition-normal);
+  }
+  
+  .sidebar.open {
+    transform: translateX(0);
+  }
+}
