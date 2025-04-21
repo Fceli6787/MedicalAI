@@ -47,17 +47,17 @@ Para garantizar el éxito del desarrollo y una experiencia excepcional, este pro
 
 ---
 
-### ✨ Características del Modelo Gemini 2.0 Flash Thinking Experimental
+### ✨ Características del Modelo Qwen 2.5 VL 72B Instruct
 
 # 🎯 Orientación Específica (System Instructions para Medicina y Salud)
 
-A través de system instructions, el modelo Gemini 2.0 puede ser guiado específicamente para áreas como Medicina y Salud. Estas instrucciones definen cómo debe comportarse y responder dentro de este contexto, asegurando que las respuestas sean adaptadas y extremadamente precisas, basándose en conocimientos médicos relevantes y actualizados hasta el año 2025. Esto lo convierte en una herramienta ideal para profesionales de la salud que requieren diagnósticos o soluciones basadas en información científica confiable.
+A través de system instructions, el modelo Qwen 2.5 VL puede ser guiado específicamente para áreas como Medicina y Salud. Estas instrucciones definen cómo debe comportarse y responder dentro de este contexto, asegurando que las respuestas sean adaptadas y extremadamente precisas, basándose en conocimientos médicos relevantes y actualizados hasta el año 2025. Esto lo convierte en una herramienta ideal para profesionales de la salud que requieren diagnósticos o soluciones basadas en información científica confiable.
 
 *   **🧠 Razonamiento Avanzado:**  
     Este modelo experimental está diseñado para ofrecer capacidades superiores de análisis, solución de problemas y toma de decisiones en contextos complejos, como los médicos. Su rendimiento es eficiente y rápido, lo que permite abordar situaciones críticas con precisión y agilidad.
 
 *   **🖼️ Multimodalidad (Procesamiento de Imágenes y PDF):**  
-    Una de las principales ventajas de Gemini 2.0 Flash Thinking Experimental es su capacidad multimodal. Puede procesar no solo texto, sino también imágenes, videos y datos de audio. Además, ha sido mejorado para interpretar y extraer información relevante de documentos PDF, lo que amplía enormemente su utilidad en entornos profesionales donde se manejan informes técnicos, artículos científicos y gráficos médicos.
+    Una de las principales ventajas de Qwen 2.5 VL es su capacidad multimodal. Puede procesar no solo texto, sino también imágenes, videos y datos de audio. Además, ha sido mejorado para interpretar y extraer información relevante de documentos PDF, lo que amplía enormemente su utilidad en entornos profesionales donde se manejan informes técnicos, artículos científicos y gráficos médicos.
 
 *   **📈 Escalabilidad:**  
     El modelo está diseñado para funcionar eficientemente incluso bajo cargas pesadas. Puede manejar múltiples solicitudes simultáneas sin comprometer la velocidad ni la estabilidad del sistema. Esta característica es crucial para aplicaciones clínicas o industriales donde el tiempo de respuesta es esencial.
