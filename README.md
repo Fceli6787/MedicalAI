@@ -31,7 +31,7 @@ Para garantizar el éxito del desarrollo y una experiencia excepcional, este pro
     ```bash
     npm install express
     ```
-*   **API de OpenRouter.ai:** Utiliza el modelo **Gemini 2.0 Flash Thinking**, previamente entrenado específicamente para el área de Medicina y Salud. Este modelo cuenta con **capacidades avanzadas de razonamiento y solución de problemas**, haciéndolo ideal para ser un asistente médico efectivo.
+*   **API de OpenRouter.ai:** Utiliza el modelo **Qwen2.5 VL 72B Instruct**, previamente entrenado específicamente para el área de Medicina y Salud. Este modelo cuenta con **capacidades avanzadas de razonamiento y solución de problemas**, haciéndolo ideal para ser un asistente médico efectivo.
 
 ### 🗄️ Gestión de Datos
 
