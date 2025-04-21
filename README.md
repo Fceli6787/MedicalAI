@@ -48,6 +48,7 @@ Para garantizar el éxito del desarrollo y una experiencia excepcional, este pro
 ---
 
 ### ✨ Características del Modelo Qwen 2.5 VL 72B Instruct
+https://camo.githubusercontent.com/ccaf5777a453a4a2736fd472e3b46b721b49bdaac6afe401bcaaeed4dc077ee0/68747470733a2f2f7169616e77656e2d7265732e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f5177656e322e352d564c2f7177656e322e35766c5f6c6f676f2e706e67
 
 # 🎯 Orientación Específica (System Instructions para Medicina y Salud)
 
