@@ -8,8 +8,7 @@ Un asistente de IA diseñado para apoyar a los profesionales médicos en diagnó
 
 Este modelo está diseñado para ofrecer un valioso apoyo a los profesionales médicos, optimizando el tiempo necesario para realizar diagnósticos, analizar radiografías e interpretar imágenes diagnósticas. Proporciona diversas opciones de interacción adaptadas a las necesidades del usuario:
 
-*   **Audio 🎤:** Sistema de reconocimiento y respuesta por voz que permite interactuar en tiempo real, simulando una conversación con un médico.
-*   **Texto ⌨️:** Interfaz gráfica intuitiva que facilita la interacción escrita, similar a herramientas como ChatGPT, Gemini y Grok.
+*   **Texto y imagen en un informe⌨️:** Interfaz gráfica intuitiva que facilita el manejo de diagnosticos por medio de la Inteligencia artificial y un dashboard.
 
 ---
 
