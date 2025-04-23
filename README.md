@@ -104,7 +104,7 @@ Sigue estos pasos para poner en marcha el proyecto:
 * **Project Leader:** Jaider Rodríguez
 * **Arquitecto de Software:** Marlon González
 * **SCRUM Master:** María Murcia
-* **Desarrolladores:** Andres Urbina, Juan Blanco, Michael Romero
+* **Desarrolladores:** Juan Blanco, Michael Romero
 * **Desarrollador Backend:** Jheison Sosa
 * **Desarrollador Frontend:** Andres Celi
 * **Ingeniero de Calidad de Software (QA):** Cristian Zabala
