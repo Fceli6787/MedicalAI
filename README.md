@@ -19,16 +19,13 @@ Para garantizar el éxito del desarrollo y una experiencia excepcional, este pro
 ### 💻 Frontend
 
 *   **React:** Framework para desarrollar una interfaz de usuario moderna, interactiva y dinámica.
-    ```bash
-    npm install react react-dom
-    ```
 *   **CSS:** Encargado del diseño visual, asegurando una experiencia atractiva y funcional para los usuarios.
 
 ### ⚙️ Backend
 
-*   **Node.js:** Entorno de desarrollo orientado a eventos, usado para implementar funcionalidades clave como inicio de sesión y autenticación de usuarios.
+*   **Next.js:** Entorno de desarrollo orientado a eventos, usado para implementar funcionalidades clave como inicio de sesión y autenticación de usuarios.
     ```bash
-    npm install express
+    pnpm install 
     ```
 *   **API de OpenRouter.ai:** Utiliza el modelo **Qwen2.5 VL 72B Instruct**, previamente entrenado específicamente para el área de Medicina y Salud. Este modelo cuenta con **capacidades avanzadas de razonamiento y solución de problemas**, haciéndolo ideal para ser un asistente médico efectivo.
 
@@ -39,9 +36,6 @@ Para garantizar el éxito del desarrollo y una experiencia excepcional, este pro
         ```bash
         mysql -u root -p < ruta-a-sofia/database.sql
         ```
-*   **Firebase:** Herramienta utilizada para la autenticación mediante cuentas de Google, brindando una experiencia segura y simplificada.
-    ```bash
-    npm install firebase
     ```
 
 ---
@@ -63,7 +57,7 @@ A través de system instructions, el modelo Qwen 2.5 VL puede ser guiado especí
     El modelo está diseñado para funcionar eficientemente incluso bajo cargas pesadas. Puede manejar múltiples solicitudes simultáneas sin comprometer la velocidad ni la estabilidad del sistema. Esta característica es crucial para aplicaciones clínicas o industriales donde el tiempo de respuesta es esencial.
 
 *   **🌐 Capacidades Multilingües:**  
-    Aunque no se menciona explícitamente en los datos recopilados, dado que Google ha desarrollado modelos previos con soporte multilingüe, podemos inferir que Gemini 2.0 Flash Thinking Experimental probablemente ofrezca compatibilidad con varios idiomas, facilitando su uso global.
+    Aunque no se menciona explícitamente en los datos recopilados, dado que Qwen ha desarrollado modelos previos con soporte multilingüe, podemos inferir que Qwen 2.5 VL 72B Instruct probablemente ofrezca compatibilidad con varios idiomas, facilitando su uso global.
 
 *   **🔒 Privacidad y Seguridad:**  
     Al utilizar este modelo, los usuarios tienen la opción de elegir entre respuestas más precisas asumiendo cierto acceso a datos personales o históricos previos. Esto destaca la importancia de la privacidad en su diseño, aunque siempre debe usarse con precaución según las necesidades del usuario.
@@ -100,7 +94,7 @@ Sigue estos pasos para poner en marcha el proyecto:
 5.  **Ejecutar el servidor:**
 
     ```bash
-    npm start
+    pnpm run dev
     ```
 
 ---
