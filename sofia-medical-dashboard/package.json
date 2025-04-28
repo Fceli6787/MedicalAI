@@ -47,6 +47,7 @@
     "date-fns": "4.1.0",
     "dicom-parser": "^1.8.21",
     "embla-carousel-react": "8.5.1",
+    "firebase": "^11.6.1",
     "html2canvas": "^1.4.1",
     "input-otp": "1.4.1",
     "jspdf": "^3.0.1",

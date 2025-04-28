@@ -1,20 +1,9 @@
-tsx
-import {
-  createContext,
-  useState,
-  useEffect,
-  useContext,
-  ReactNode,
-} from "react";
-import {
-    getAuth,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut, onAuthStateChanged,
-  User,
-} from "firebase/auth";
-import { app } from "../lib/firebase";
-import { addUser, getUser } from "@/lib/db";
+"use client";
+
+import { createContext, useState, useContext, ReactNode } from "react";
+import { signOut, getAuth } from "firebase/auth";
+import { login, register, User } from "@/app/auth";
+import { app } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -22,9 +11,8 @@ interface AuthContextProps {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
-  updateUser: (user: User | null) => void;
 }
 
 const AuthContext = createContext<AuthContextProps | undefined>(undefined);
@@ -34,36 +22,18 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(null); // Now using the correct User type
   const [loading, setLoading] = useState<boolean>(true);
   const router = useRouter();
-
-  const auth = getAuth(app);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [auth]);
-
+    const auth = getAuth(app);
+  
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-        const dbUser = await getUser(userCredential.user.uid);
-        if (!dbUser) {
-            signOut(auth);
-            toast.error("This user does not have access");
-        } else {
-            setUser(userCredential.user);
-            toast.success(`Welcome ${dbUser.primer_nombre}`);
-        }
+      const response : { user: dbUser} = await login(email, password);
+      setUser(response.user);
+      toast.success(`Welcome ${response.user.primer_nombre}`);
+      router.push("/dashboard");
     } catch (error) {
       console.error("Error logging in:", error);
       toast.error("Something went wrong when logging");
@@ -72,38 +42,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-    const updateUser = (user: User | null) => {
-        setUser(user);
-    };
-
   const logout = async () => {
     try {
       await signOut(auth);
+      setUser(null);
+      router.push("/");
     } catch (error) {
       console.error("Error logging out:", error);
-      throw error;
+      toast.error("Something went wrong when logging out");
     }
   };
 
-  const register = async (email: string, password: string) => {
+  const register = async (
+    name: string,
+    email: string,
+    password: string
+  ) => {
     setLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        if (userCredential.user.email === "admin@example.com") {
-            toast.error("Admin user can not be created this way");
-        } else {
-            await addUser({
-                firebase_uid: userCredential.user.uid,
-                nui: "0000000000",
-                primer_nombre: userCredential.user.displayName || "No name",
-                primer_apellido: "No apellido",
-                correo: userCredential.user.email || email,
-                id_tipo_documento: 1,
-                id_pais: 1,
-            });
-            toast.success("User created successfully");
-        }
-
+      await register(name, email, password);
+      toast.success("User created successfully");
+      router.push("/");
     } catch (error) {
       console.error("Error registering user:", error);
       toast.error("Something went wrong when creating the user");
@@ -119,7 +78,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     login,
     logout,
     register,
-    updateUser,
+
   };
 
   return (
@@ -134,3 +93,4 @@ export const useAuth = () => {
   }
   return context;
 };
+
