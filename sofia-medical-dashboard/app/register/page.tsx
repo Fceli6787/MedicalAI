@@ -53,7 +53,23 @@ export default function RegisterPage() {
       // En un caso real, aquí iría la llamada a la API de registro
       await new Promise((resolve) => setTimeout(resolve, 1500))
 
-      // Simulamos un registro exitoso
+      // Guardar usuario en localStorage
+      const users = JSON.parse(localStorage.getItem("sofia-users") || "[]")
+      const userExists = users.some((user: any) => user.email === formData.email)
+      
+      if (userExists) {
+        setError("El correo ya está registrado")
+        setIsLoading(false)
+        return
+      }
+
+      const newUser = {
+        id: Date.now(),
+        ...formData,
+        createdAt: new Date().toISOString()
+      }
+      
+      localStorage.setItem("sofia-users", JSON.stringify([...users, newUser]))
       router.push("/login?registered=true")
     } catch (err) {
       setError("Error al registrarse. Por favor intente nuevamente.")

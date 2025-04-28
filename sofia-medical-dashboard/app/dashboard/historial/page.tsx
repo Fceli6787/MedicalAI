@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { getDiagnosticos } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,53 +10,37 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Search, Calendar, Filter, Download, Eye, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
 
-// Datos simulados para la tabla
-const diagnosticosSimulados = Array.from({ length: 50 }).map((_, i) => {
-  const date = new Date()
-  date.setDate(date.getDate() - Math.floor(Math.random() * 60))
-
-  const tipos = ["Radiografía", "Resonancia", "Tomografía", "Ecografía"]
-  const regiones = ["Tórax", "Abdomen", "Cráneo", "Extremidades"]
-  const diagnosticos = [
-    "Neumonía",
-    "Fractura",
-    "Normal",
-    "Derrame pleural",
-    "Tumor",
-    "Inflamación",
-    "Calcificación",
-    "Atelectasia",
-  ]
-
-  const confianza = Math.floor(Math.random() * 30) + 70
-
-  return {
-    id: `DIAG-${1000 + i}`,
-    pacienteId: `PAC-${Math.floor(Math.random() * 1000)}`,
-    pacienteNombre: `Paciente ${i + 1}`,
-    fecha: date.toISOString().split("T")[0],
-    tipo: tipos[Math.floor(Math.random() * tipos.length)],
-    region: regiones[Math.floor(Math.random() * regiones.length)],
-    diagnostico: diagnosticos[Math.floor(Math.random() * diagnosticos.length)],
-    confianza: confianza,
-    estado: confianza > 90 ? "Alto" : confianza > 80 ? "Medio" : "Bajo",
-  }
-})
-
 export default function HistorialPage() {
+  const [diagnosticos, setDiagnosticos] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [filtroTipo, setFiltroTipo] = useState("")
   const [filtroRegion, setFiltroRegion] = useState("")
   const [sortConfig, setSortConfig] = useState<{
     key: string
-    direction: "ascending" | "descending"
+    direction: "ascending" | "describing"
   } | null>(null)
 
   const itemsPerPage = 10
 
+  useEffect(() => {
+    const loadDiagnosticos = async () => {
+      try {
+        const data = await getDiagnosticos()
+        setDiagnosticos(data)
+      } catch (error) {
+        console.error("Error cargando diagnósticos:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadDiagnosticos()
+  }, [])
+
   // Filtrar diagnósticos
-  const filteredDiagnosticos = diagnosticosSimulados.filter((diag) => {
+  // FIX: Changed 'diagnósticos' to 'diagnosticos' to match state variable name
+  const filteredDiagnosticos = diagnosticos.filter((diag) => {
     const matchesSearch =
       diag.pacienteNombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
       diag.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -89,9 +74,9 @@ export default function HistorialPage() {
 
   // Función para ordenar
   const requestSort = (key: string) => {
-    let direction: "ascending" | "descending" = "ascending"
+    let direction: "ascending" | "describing" = "ascending"
     if (sortConfig && sortConfig.key === key && sortConfig.direction === "ascending") {
-      direction = "descending"
+      direction = "describing"
     }
     setSortConfig({ key, direction })
   }
@@ -109,7 +94,10 @@ export default function HistorialPage() {
   }
 
   return (
-    <div className="space-y-6">
+    // El div principal está configurado para ocupar el ancho completo de su contenedor padre
+    // y tener padding horizontal interno. El espaciado a la izquierda de la barra lateral
+    // debe ser manejado por el componente de layout que envuelve esta página.
+    <div className="space-y-6 w-full px-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Historial de Diagnósticos</h1>
         <p className="text-gray-500">Consulte y gestione los diagnósticos realizados</p>
@@ -180,7 +168,9 @@ export default function HistorialPage() {
               <span>Exportar</span>
             </Button>
           </div>
-          <CardDescription>{filteredDiagnosticos.length} diagnósticos encontrados</CardDescription>
+                  <CardDescription>
+                    {loading ? "Cargando..." : `${filteredDiagnosticos.length} diagnósticos encontrados`}
+                  </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border">
@@ -218,7 +208,13 @@ export default function HistorialPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedDiagnosticos.length > 0 ? (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="h-24 text-center">
+                      Cargando diagnósticos...
+                    </TableCell>
+                  </TableRow>
+                ) : paginatedDiagnosticos.length > 0 ? (
                   paginatedDiagnosticos.map((diag) => (
                     <TableRow key={diag.id}>
                       <TableCell className="font-medium">{diag.id}</TableCell>

@@ -2,6 +2,8 @@
 
 import type React from "react"
 import { useRef, useState } from "react"
+import * as dicomParser from 'dicom-parser'
+import * as cornerstone from 'cornerstone-core'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,6 +17,7 @@ import { Upload, AlertCircle, CheckCircle2, Download, Save } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { analyzeImageWithOpenRouter } from "@/lib/openrouter"
 import { generateDiagnosisPDF } from "@/lib/generate-pdf"
+import { saveDiagnostico } from "@/lib/utils"
 
 export default function NuevoDiagnosticoPage() {
   const [activeTab, setActiveTab] = useState("cargar")
@@ -27,6 +30,8 @@ export default function NuevoDiagnosticoPage() {
   const [diagnosisResult, setDiagnosisResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const imageRef = useRef<HTMLDivElement>(null)
+  const [region, setRegion] = useState("torax")
+  const [imageType, setImageType] = useState("Radiografía")
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -37,17 +42,122 @@ export default function NuevoDiagnosticoPage() {
     setError(null)
 
     try {
-      // Crear URL para previsualización
-      const previewUrl = URL.createObjectURL(file)
-      setImagePreview(previewUrl)
+      const isDicom = file.name.toLowerCase().endsWith('.dcm') || 
+                     file.type === 'application/dicom'
 
-      // Convertir imagen a Base64
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const base64String = (reader.result as string).split(",")[1]
-        setImageBase64(base64String)
+      if (isDicom) {
+        try {
+          // Procesar archivo DICOM
+          setError(null)
+          setUploadProgress(30) // Indica inicio de conversión
+          
+          const arrayBuffer = await file.arrayBuffer()
+          const byteArray = new Uint8Array(arrayBuffer)
+          const dataSet = dicomParser.parseDicom(byteArray)
+          
+          // Configurar cornerstone
+          cornerstone.metaData.addProvider((type, imageId) => {
+            if (type === 'dicom') return dataSet
+            return null
+          }, 1000)
+          
+          // Extraer datos básicos del DICOM
+          const width = dataSet.uint16('x00280011') || 512
+          const height = dataSet.uint16('x00280010') || 512
+          const pixelDataElement = dataSet.elements.x7fe00010
+          const pixelData = new Uint8Array(arrayBuffer, pixelDataElement.dataOffset, pixelDataElement.length)
+          
+          // Crear canvas para conversión
+          const canvas = document.createElement('canvas')
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          
+          if (!ctx) throw new Error('No se pudo crear contexto de canvas')
+          
+          // Convertir datos DICOM a ImageData
+          const imageData = ctx.createImageData(width, height)
+          for (let i = 0; i < pixelData.length; i++) {
+            imageData.data[i] = pixelData[i]
+          }
+          
+          // Aplicar ajuste de ventana/level mejorado para DICOM
+          const applyWindowLevel = (data: Uint8ClampedArray) => {
+            // Obtener parámetros DICOM (con valores por defecto razonables)
+            const windowCenter = dataSet.int16('x00281050') || 50
+            const windowWidth = dataSet.int16('x00281051') || 400
+            const slope = parseFloat(dataSet.string('x00281053') || '1')
+            const intercept = parseFloat(dataSet.string('x00281052') || '0')
+            const bitsStored = dataSet.uint16('x00280101') || 16
+            const pixelRepresentation = dataSet.uint16('x00280103') || 0 // 0=unsigned, 1=signed
+            
+            // Calcular rango de valores posibles
+            const maxValue = Math.pow(2, bitsStored) - 1
+            const minValue = pixelRepresentation === 1 ? -maxValue / 2 : 0
+            
+            // Aplicar transformación a cada píxel
+            for (let i = 0; i < data.length; i += 4) {
+              // Aplicar rescale slope/intercept
+              let value = (data[i] * slope) + intercept
+              
+              // Asegurar que el valor esté dentro del rango posible
+              value = Math.max(minValue, Math.min(maxValue, value))
+              
+              // Calcular ventana de visualización
+              const windowMin = windowCenter - (windowWidth / 2)
+              const windowMax = windowCenter + (windowWidth / 2)
+              
+              // Normalizar a rango 0-255
+              let normalized = 0
+              if (value <= windowMin) {
+                normalized = 0
+              } else if (value >= windowMax) {
+                normalized = 255
+              } else {
+                normalized = Math.round(((value - windowMin) / windowWidth) * 255)
+              }
+              
+              // Asignar a canales RGB (escala de grises)
+              data[i] = data[i+1] = data[i+2] = normalized
+              data[i+3] = 255 // Alpha
+            }
+          }
+          
+          // Verificar si los datos DICOM están comprimidos
+          const transferSyntax = dataSet.string('x00020010') || '1.2.840.10008.1.2' // Implicit VR Little Endian
+          if (transferSyntax.includes('1.2.840.10008.1.2.4')) {
+            throw new Error('Archivos DICOM comprimidos no soportados. Use un archivo sin compresión.')
+          }
+
+          applyWindowLevel(imageData.data)
+          ctx.putImageData(imageData, 0, 0)
+          
+          // Obtener PNG como base64
+          setUploadProgress(80) // Indica conversión completada
+          const pngUrl = canvas.toDataURL('image/png', 0.95) // Calidad 95%
+          const pngBase64 = pngUrl.split(',')[1]
+          
+          setImageBase64(pngBase64)
+          setImagePreview(pngUrl)
+          setUploadProgress(100)
+        } catch (err) {
+          console.error('Error procesando DICOM:', err)
+          setError('Error al procesar archivo DICOM. Asegúrese que es un archivo válido.')
+          setIsUploading(false)
+          return
+        }
+      } else {
+        // Procesar imagen normal (PNG/JPG)
+        const previewUrl = URL.createObjectURL(file)
+        setImagePreview(previewUrl)
+
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          const base64String = (reader.result as string).split(",")[1]
+          setImageBase64(base64String)
+        }
+        reader.readAsDataURL(file)
       }
-      reader.readAsDataURL(file)
 
       // Simular progreso de carga
       const interval = setInterval(() => {
@@ -121,9 +231,10 @@ export default function NuevoDiagnosticoPage() {
   }
 
   const handleSave = async () => {
-    if (!diagnosisResult) return;
+    if (!diagnosisResult || !imageBase64) return;
 
     // Obtener todos los datos del formulario del paciente
+    const formData = new FormData()
     const patientId = (document.getElementById("patientId") as HTMLInputElement)?.value;
     const firstName = (document.getElementById("firstName") as HTMLInputElement)?.value || "";
     const lastName = (document.getElementById("lastName") as HTMLInputElement)?.value || "";
@@ -131,8 +242,6 @@ export default function NuevoDiagnosticoPage() {
     const gender = document.querySelector('[id^="gender"]')?.getAttribute("data-value") || "no especificado";
     const examDate = (document.getElementById("examDate") as HTMLInputElement)?.value || new Date().toISOString().split("T")[0];
     const clinicalHistory = (document.getElementById("clinicalHistory") as HTMLTextAreaElement)?.value || "";
-    const imageType = document.querySelector('[id^="radix-:r"][aria-expanded]')?.textContent || "Radiografía";
-    const region = (document.querySelector('input[name="region"]:checked') as HTMLInputElement)?.value || "torax";
 
     // Generar ID único para el diagnóstico
     const diagId = `DIAG-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -152,20 +261,28 @@ export default function NuevoDiagnosticoPage() {
       descripcion: diagnosisResult.description || "",
     };
 
+    // Agregar imagen y datos al formData
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    if (fileInput?.files?.[0]) {
+      formData.append('imagen', fileInput.files[0])
+    }
+    formData.append('diagnostico', JSON.stringify(diagnosticoData))
+
     try {
       // Validar datos requeridos
       if (!diagnosticoData.pacienteNombre) {
         throw new Error("El nombre del paciente es requerido");
       }
 
-      // Obtener diagnósticos existentes del localStorage
-      const diagnosticosGuardados = JSON.parse(localStorage.getItem("diagnosticos") || "[]");
-      
-      // Agregar el nuevo diagnóstico
-      diagnosticosGuardados.push(diagnosticoData);
-      
-      // Guardar en localStorage
-      localStorage.setItem("diagnosticos", JSON.stringify(diagnosticosGuardados));
+      // Enviar datos al servidor
+      const response = await fetch('/api/diagnosticos', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al guardar el diagnóstico');
+      }
 
       // Mostrar alerta de éxito
       setError(null);
@@ -245,7 +362,7 @@ export default function NuevoDiagnosticoPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="imageType">Tipo de Imagen</Label>
-                    <Select defaultValue="radiografia">
+                    <Select defaultValue="radiografia" onValueChange={setImageType}>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccione el tipo de imagen" />
                       </SelectTrigger>
@@ -261,7 +378,7 @@ export default function NuevoDiagnosticoPage() {
 
                   <div className="space-y-2">
                     <Label>Región Anatómica</Label>
-                    <RadioGroup defaultValue="torax">
+                    <RadioGroup defaultValue="torax" onValueChange={setRegion}>
                       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="torax" id="torax" />
@@ -300,7 +417,10 @@ export default function NuevoDiagnosticoPage() {
               <Card className="border-teal-100">
                 <CardHeader>
                   <CardTitle>Resultados del Análisis</CardTitle>
-                  <CardDescription>Diagnóstico generado por SOFIA AI</CardDescription>
+                  <div className="flex items-center justify-center gap-2">
+                    <span>Diagnóstico generado por</span>
+                    <img src="/Logo_sofia.png" alt="SOFIA AI" className="h-6" />
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {isAnalyzing ? (

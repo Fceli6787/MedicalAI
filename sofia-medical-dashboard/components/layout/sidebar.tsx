@@ -66,10 +66,13 @@ export function SidebarNav({ children }: SidebarNavProps) {
     <SidebarProvider defaultOpen={open} onOpenChange={setOpen}>
       <div className="flex h-screen">
         <Sidebar className="border-r border-gray-200">
-          <SidebarHeader className="flex h-14 items-center border-b border-gray-200 px-4">
-            <div className="flex items-center gap-2 font-semibold text-teal-700">
-              <div className="h-6 w-6 rounded bg-teal-500" />
-              <span className="text-lg">SOFIA AI</span>
+          <SidebarHeader className="h-32 border-b border-gray-200 flex items-center justify-center p-0">
+            <div className="flex items-center justify-center w-full">
+              <img 
+                src="/Logo_sofia.png" 
+                alt="SOFIA AI" 
+                className="h-28 w-auto max-w-full object-contain" 
+              />
             </div>
           </SidebarHeader>
           <SidebarContent>

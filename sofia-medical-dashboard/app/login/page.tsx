@@ -30,13 +30,19 @@ export default function LoginPage() {
       // En un caso real, aquí iría la llamada a la API de autenticación
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
-      // Simulamos un login exitoso
-      if (email === "doctor@sofia.ai" && password === "password") {
+      // Validar credenciales por defecto o usuarios registrados
+      const users = JSON.parse(localStorage.getItem("sofia-users") || "[]")
+      const validUser = 
+        (email === "doctor@sofia.ai" && password === "password") ||
+        users.some((user: any) => user.email === email && user.password === password)
+
+      if (validUser) {
         // Guardar token en localStorage (simulado)
         localStorage.setItem("auth-token", "fake-jwt-token")
+        localStorage.setItem("current-user", email)
         router.push("/dashboard")
       } else {
-        setError("Credenciales incorrectas. Intente con doctor@sofia.ai / password")
+        setError("Credenciales incorrectas. Intente con doctor@sofia.ai / password o use sus credenciales registradas")
       }
     } catch (err) {
       setError("Error al iniciar sesión. Por favor intente nuevamente.")
