@@ -1,14 +1,16 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, CardBody } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
+import { useAuthContext } from "@/context/AuthContext"
+import { getUsers } from "@/lib/db"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { AlertCircle, Save, User, Lock, Bell, Database, Shield, Zap } from "lucide-react"
@@ -65,6 +67,26 @@ export default function ConfiguracionPage() {
     setSistema((prev) => ({ ...prev, [id]: value }))
   }
 
+  const [users, setUsers] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuthContext();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const data = await getUsers();
+        setUsers(data);
+      } catch (err) {
+        setError("Error fetching users");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+
   return (
     <div className="space-y-6">
       <div>
@@ -72,7 +94,24 @@ export default function ConfiguracionPage() {
         <p className="text-gray-500">Gestione las preferencias de su cuenta y del sistema</p>
       </div>
 
-      <Tabs defaultValue="perfil" className="space-y-4">
+       {loading ? (
+        <div>Loading...</div>
+      ) : error ? (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : (
+        user?.role !== "admin" ? (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>No tienes permisos</AlertTitle>
+            <AlertDescription>No tienes permisos para ver esta información</AlertDescription>
+          </Alert>
+        ) : (
+ <Tabs defaultValue="perfil" className="space-y-4">
+         
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="perfil" className="flex items-center gap-2">
             <User className="h-4 w-4" />
@@ -91,6 +130,18 @@ export default function ConfiguracionPage() {
             <span>Sistema</span>
           </TabsTrigger>
         </TabsList>
+
+        <Card className="border-teal-100">
+        <CardHeader>
+              <CardTitle>Usuarios</CardTitle>
+              <CardDescription>Lista de Usuarios</CardDescription>
+            </CardHeader>
+            <CardBody>
+            <ul>
+            {users.map((user: any) => ( <li key={user.id_usuario}>{user.primer_nombre} - {user.correo}</li> ))}
+            </ul>
+            </CardBody>
+        </Card>
 
         <TabsContent value="perfil" className="space-y-4">
           <Card className="border-teal-100">
@@ -174,7 +225,7 @@ export default function ConfiguracionPage() {
               <Button className="bg-teal-600 hover:bg-teal-700">
                 <Lock className="mr-2 h-4 w-4" />
                 Actualizar Contraseña
-              </Button>
+               </Button>
             </CardFooter>
           </Card>
         </TabsContent>
@@ -441,7 +492,8 @@ export default function ConfiguracionPage() {
             </CardFooter>
           </Card>
         </TabsContent>
-      </Tabs>
+      </Tabs>)
+  )}
     </div>
   )
 }

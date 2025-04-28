@@ -1,6 +1,6 @@
 -- Crear base de datos
-CREATE DATABASE MedicalAI;
-USE MedicalAI;
+CREATE DATABASE SOFIAMedicalAI;
+USE SOFIAMedicalAI;
 
 -- Tabla: TiposDocumento
 CREATE TABLE TiposDocumento (
@@ -45,7 +45,7 @@ CREATE TABLE Usuarios (
     primer_apellido VARCHAR(50) NOT NULL,
     segundo_apellido VARCHAR(50),
     correo VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
+    firebase_uid VARCHAR(255) UNIQUE,
     fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
     ultima_actividad DATETIME,
     estado ENUM('Activo', 'Inactivo', 'Bloqueado') DEFAULT 'Activo',
@@ -216,7 +216,6 @@ CREATE TABLE Notificaciones (
     FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario)
 );
 
-
 -- Insertar roles básicos
 INSERT INTO Roles (nombre, descripcion) VALUES
 ('admin', 'Administrador del sistema'),
@@ -251,20 +250,6 @@ INSERT INTO TiposNotificacion (nombre, plantilla, icono, color) VALUES
 ('ResultadosDisponibles', 'Los resultados del análisis de {paciente} están disponibles para revisión.', 'clipboard-list', '#2563eb'),
 ('RecordatorioCita', 'Recordatorio: Tiene una cita programada con {paciente} para {fecha}.', 'calendar', '#d97706'),
 ('ActualizacionSistema', 'Se ha realizado una actualización importante en el sistema: {mensaje}', 'info-circle', '#6366f1');
-
-
--- Insertar un usuario administrador
-INSERT INTO Usuarios (id_tipo_documento, id_pais, nui, primer_nombre, primer_apellido, correo, password_hash, estado)
-VALUES ((SELECT id_tipo_documento FROM TiposDocumento WHERE codigo = 'CC'), 
-        (SELECT id_pais FROM Paises WHERE codigo = 'COL'), 
-        '1234567890', 'Admin', 'Admin', 'admin@example.com', 
-        '$2b$10$vLDhx8GWgpmB6fDb16EJU.OUAFiZMqIOzMWTJQwXXQ.kXkXxRzZ2m', 'Activo');
-
--- Asignar rol de administrador al usuario creado
-INSERT INTO UsuariosRoles (id_usuario, id_rol)
-VALUES ((SELECT id_usuario FROM Usuarios WHERE correo = 'admin@example.com'), 
-        (SELECT id_rol FROM Roles WHERE nombre = 'admin'));
-
 
 -- Índices para optimizar consultas
 CREATE INDEX idx_notificaciones_usuario_estado ON Notificaciones(id_usuario, estado);

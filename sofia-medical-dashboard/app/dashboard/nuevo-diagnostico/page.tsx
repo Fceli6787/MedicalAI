@@ -1,14 +1,19 @@
 "use client"
 
-import type React from "react"
-import { useRef, useState } from "react"
+import React, { useRef, useState, useEffect } from "react"
 import * as dicomParser from 'dicom-parser'
 import * as cornerstone from 'cornerstone-core'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { useAuth } from "@/context/AuthContext";
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -18,17 +23,39 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { analyzeImageWithOpenRouter } from "@/lib/openrouter"
 import { generateDiagnosisPDF } from "@/lib/generate-pdf"
 import { saveDiagnostico } from "@/lib/utils"
+import { addDiagnostico } from "@/lib/db";
 
 export default function NuevoDiagnosticoPage() {
-  const [activeTab, setActiveTab] = useState("cargar")
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [imageBase64, setImageBase64] = useState<string | null>(null)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [analysisComplete, setAnalysisComplete] = useState(false)
-  const [diagnosisResult, setDiagnosisResult] = useState<any>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState("cargar");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisComplete, setAnalysisComplete] = useState(false);
+  const [diagnosisResult, setDiagnosisResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const [pacienteId, setPacienteId] = useState<string | null>(null);
+  const [medicoId, setMedicoId] = useState<string | null>(null);
+  const [tipoExamen, setTipoExamen] = useState<string | null>(null);
+  const [confianza, setConfianza] = useState<number | null>(null);
+  const [resultado, setResultado] = useState<string | null>(null);
+
+  const { user } = useAuth();
+
+  const hasPermissions =
+    user?.role === "admin" || user?.role === "medico";
+
+  useEffect(() => {
+    if (diagnosisResult?.confidence) {
+      setConfianza(diagnosisResult.confidence);
+    }
+    if (diagnosisResult?.condition) {
+      setResultado(diagnosisResult.condition);
+    }
+  }, [diagnosisResult]);
   const imageRef = useRef<HTMLDivElement>(null)
   const [region, setRegion] = useState("torax")
   const [imageType, setImageType] = useState("Radiografía")
@@ -230,55 +257,47 @@ export default function NuevoDiagnosticoPage() {
     }
   }
 
-  const handleSave = async () => {
-    if (!diagnosisResult || !imageBase64) return;
-
-    // Obtener todos los datos del formulario del paciente
-    const formData = new FormData()
-    const patientId = (document.getElementById("patientId") as HTMLInputElement)?.value;
-    const firstName = (document.getElementById("firstName") as HTMLInputElement)?.value || "";
-    const lastName = (document.getElementById("lastName") as HTMLInputElement)?.value || "";
-    const age = (document.getElementById("age") as HTMLInputElement)?.value;
-    const gender = document.querySelector('[id^="gender"]')?.getAttribute("data-value") || "no especificado";
-    const examDate = (document.getElementById("examDate") as HTMLInputElement)?.value || new Date().toISOString().split("T")[0];
-    const clinicalHistory = (document.getElementById("clinicalHistory") as HTMLTextAreaElement)?.value || "";
-
-    // Generar ID único para el diagnóstico
-    const diagId = `DIAG-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    const diagnosticoData = {
-      id: diagId,
-      pacienteId: patientId || `PAC-${Math.floor(1000 + Math.random() * 9000)}`,
-      pacienteNombre: `${firstName} ${lastName}`.trim(),
-      edad: age,
-      genero: gender,
-      fecha: examDate,
-      historiaClinica: clinicalHistory,
-      tipo: imageType,
-      region: region,
-      diagnostico: diagnosisResult.condition,
-      confianza: diagnosisResult.confidence,
-      descripcion: diagnosisResult.description || "",
-    };
-
-    // Agregar imagen y datos al formData
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-    if (fileInput?.files?.[0]) {
-      formData.append('imagen', fileInput.files[0])
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!confianza || !resultado || !tipoExamen || !pacienteId || !medicoId) {
+      setError("Todos los campos son obligatorios");
+      return;
     }
-    formData.append('diagnostico', JSON.stringify(diagnosticoData))
+    setLoading(true);
+    setError(null);
 
     try {
-      // Validar datos requeridos
-      if (!diagnosticoData.pacienteNombre) {
-        throw new Error("El nombre del paciente es requerido");
+      if (!user?.id) {
+        throw new Error("Usuario no autenticado");
       }
+      const diagnostico = {
+        id_paciente: parseInt(pacienteId),
+        id_medico: parseInt(user?.id),
+        id_tipo_examen: parseInt(tipoExamen),
+        resultado,
+        nivel_confianza: confianza,
+      };
 
-      // Enviar datos al servidor
-      const response = await fetch('/api/diagnosticos', {
-        method: 'POST',
-        body: formData
-      });
+      const response = await addDiagnostico(diagnostico);
+      setLoading(false);
+      if (response) {
+        alert("Diagnóstico guardado exitosamente");
+      } else {
+        throw new Error("Error al guardar el diagnostico");
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Error al guardar el diagnóstico"
+      );
+      console.error("Error al guardar:", err);
+    } finally {
+      setLoading(false);
+    }
+
+      /*const response = await fetch('/api/diagnosticos', {
+        method: 'POST',*/
 
       if (!response.ok) {
         throw new Error('Error al guardar el diagnóstico');
@@ -287,31 +306,25 @@ export default function NuevoDiagnosticoPage() {
       // Mostrar alerta de éxito
       setError(null);
       alert("Diagnóstico guardado exitosamente");
-      
-      // Opcional: redirigir al historial
-      // router.push("/dashboard/historial");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al guardar el diagnóstico");
-      console.error("Error al guardar:", err);
-    }
+  };
+
+  if (!hasPermissions) {
+    return (
+      <div className="text-center">
+        <h1 className="text-2xl font-bold">No tienes permisos para ver esta página</h1>
+      </div>
+    )
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Nuevo Diagnóstico</h1>
-        <p className="text-gray-500">Cargue una imagen médica para análisis por IA</p>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="cargar">Cargar Imagen</TabsTrigger>
-              <TabsTrigger value="resultados" disabled={!imagePreview}>
-                Resultados
-              </TabsTrigger>
-            </TabsList>
+      {loading && <div>Cargando...</div>}
+      {error && <div>Error: {error}</div>}
+      {!loading && !error && (
+        <div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">Nuevo Diagnóstico</h1>
+            <p className="text-gray-500">Cargue una imagen médica para análisis por IA</p>
 
             <TabsContent value="cargar" className="space-y-4">
               <Card className="border-teal-100">
@@ -512,19 +525,19 @@ export default function NuevoDiagnosticoPage() {
                     <Button variant="outline" onClick={() => setActiveTab("cargar")}>
                       Volver
                     </Button>
-                    <div className="flex gap-2">
-                      <Button variant="outline" className="flex items-center gap-1" onClick={handleSave}>
-                        <Save className="h-4 w-4" />
-                        <span>Guardar</span>
-                      </Button>
-                      <Button 
-                        onClick={handleDownloadReport}
-                        className="flex items-center gap-1 bg-teal-600 hover:bg-teal-700"
-                      >
-                        <Download className="h-4 w-4" />
-                        <span>Descargar Informe</span>
-                      </Button>
-                    </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={handleSave}
+                            className="flex items-center gap-1 bg-teal-600 hover:bg-teal-700"
+                          >
+                            <Save className="h-4 w-4" />
+                            <span>Guardar</span>
+                          </Button>
+                          <Button onClick={handleDownloadReport} className="flex items-center gap-1 bg-teal-600 hover:bg-teal-700">
+                            <Download className="h-4 w-4" />
+                            <span>Descargar Informe</span>
+                          </Button>
+                        </div>
                   </CardFooter>
                 )}
               </Card>
@@ -541,11 +554,11 @@ export default function NuevoDiagnosticoPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="patientId">ID del Paciente</Label>
-                <Input id="patientId" placeholder="Ej: PAC-12345" />
+                <Input id="patientId" placeholder="Ej: PAC-12345" onChange={(e) => setPacienteId(e.target.value)} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                {/*<div className="space-y-2">
                   <Label htmlFor="firstName">Nombre</Label>
                   <Input id="firstName" />
                 </div>
@@ -583,11 +596,12 @@ export default function NuevoDiagnosticoPage() {
               <div className="space-y-2">
                 <Label htmlFor="clinicalHistory">Historia Clínica</Label>
                 <Textarea id="clinicalHistory" placeholder="Ingrese antecedentes relevantes del paciente" rows={4} />
-              </div>
+              </div>*/}
             </CardContent>
           </Card>
         </div>
       </div>
     </div>
-  )
+    </div>
+  );
 }

@@ -1,26 +1,36 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useContext } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Activity, Users, Clock, BarChart3, TrendingUp } from "lucide-react"
-import {
-  getTotalDiagnosticos,
-  getTotalPacientes,
-  getPrecisionPromedio,
-  getUltimosDiagnosticos
-} from "@/lib/utils"
+import { Activity, Users, Clock, BarChart3, TrendingUp, AlertTriangle } from "lucide-react"
+import { getDiagnosticos, getPacientes, getUsers } from "@/lib/db"
+import { AuthContext } from "@/context/AuthContext"
 
 export default function DashboardPage() {
-  const [totalDiagnosticos, setTotalDiagnosticos] = useState(0)
-  const [totalPacientes, setTotalPacientes] = useState(0)
-  const [precisionPromedio, setPrecisionPromedio] = useState(0)
-  const [ultimosDiagnosticos, setUltimosDiagnosticos] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const { user } = useContext(AuthContext)
+  const [diagnosticos, setDiagnosticos] = useState<any[]>([])
+  const [pacientes, setPacientes] = useState<any[]>([])
+  const [usuarios, setUsuarios] = useState<any[]>([])
+  const [loadingDiagnosticos, setLoadingDiagnosticos] = useState(true)
+  const [loadingPacientes, setLoadingPacientes] = useState(true)
+  const [loadingUsuarios, setLoadingUsuarios] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const cargarDatos = async () => {
+      setLoadingDiagnosticos(true)
+      setLoadingPacientes(true)
+      setLoadingUsuarios(true)
       try {
+        const [usuariosData, pacientesData, diagnosticosData] = await Promise.all([
+          getUsers(),
+          getPacientes(),
+          getDiagnosticos()
+        ])
+        setUsuarios(usuariosData)
+        setPacientes(pacientesData)
+        setDiagnosticos(diagnosticosData)
         const [
           diagnosticos,
           pacientes,
@@ -33,18 +43,41 @@ export default function DashboardPage() {
           getUltimosDiagnosticos()
         ])
 
-        setTotalDiagnosticos(diagnosticos)
-        setTotalPacientes(pacientes)
-        setPrecisionPromedio(precision)
-        setUltimosDiagnosticos(ultimos)
+        
+       
       } catch (error) {
         console.error("Error cargando datos del dashboard:", error)
+        setError("Error al cargar los datos")
       } finally {
-        setLoading(false)
+        setLoadingDiagnosticos(false)
+        setLoadingPacientes(false)
+        setLoadingUsuarios(false)
       }
     }
     cargarDatos()
   }, [])
+  
+  
+    if (!user) {
+      return (
+        <div className="flex items-center justify-center h-screen">
+          <AlertTriangle className="h-10 w-10 text-red-500 mr-2" />
+          <p className="text-red-500 text-xl">No tienes permiso para ver esta pagina</p>
+        </div>
+      )
+    }
+
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-screen">
+          <AlertTriangle className="h-10 w-10 text-red-500 mr-2" />
+          <p className="text-red-500 text-xl">{error}</p>
+        </div>
+      )
+    }
+
+  const precisionPromedio = 85 // Example percentage, you can modify it
+
 
   // Amount to shift children left relative to container
   const shiftClass = "transform -translate-x-24"
@@ -53,8 +86,9 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 w-full pl-48 pr-8 overflow-x-hidden">
       {/* Title section shifted left */}
-      <div className={shiftClass}>
+      <div className={`${shiftClass} flex items-center justify-between`}>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
+        <p>Bienvenido {user?.name}</p>
         <div className="flex items-center gap-2">
           <img src="Logo_sofia.png" alt="SOFIA AI" className="h-8" />
           <span className="text-gray-500">Medical</span>
@@ -63,9 +97,9 @@ export default function DashboardPage() {
 
       {/* Metric cards shifted left */}
       <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-        {[{
-          title: 'Diagnósticos Totales', value: loading ? '...' : totalDiagnosticos.toLocaleString(), icon: <Activity className="h-4 w-4 text-teal-600" />, description: 'Total acumulado'
-        }, {
+         {[{
+          title: 'Diagnósticos Totales', value: loadingDiagnosticos ? '...' : diagnosticos.length.toLocaleString(), icon: <Activity className="h-4 w-4 text-teal-600" />, description: 'Total acumulado'
+        },{
           title: 'Pacientes Registrados', value: loading ? '...' : totalPacientes.toLocaleString(), icon: <Users className="h-4 w-4 text-teal-600" />, description: 'Pacientes únicos'
         }, {
           title: 'Tiempo Promedio', value: loading ? '...' : '2.4s', icon: <Clock className="h-4 w-4 text-teal-600" />, description: 'Tiempo estimado'
@@ -107,11 +141,11 @@ export default function DashboardPage() {
             <CardContent>
               <div className="space-y-4">
                 {loading ? (
-                  <div className="h-24 flex items-center justify-center">
+                  <div className="h-24 flex items-center justify-center" >
                     <p className="text-gray-500">Cargando diagnósticos...</p>
                   </div>
-                ) : ultimosDiagnosticos.length > 0 ? (
-                  ultimosDiagnosticos.map((diag) => (
+                ) : diagnosticos.length > 0 ? (
+                  diagnosticos.map((diag) => (
                     <div
                       key={diag.id}
                       className="flex items-center gap-4 rounded-lg border border-gray-200 p-3 hover:bg-gray-50 transition-colors duration-150"
@@ -126,7 +160,7 @@ export default function DashboardPage() {
                       <div className="text-right">
                         <div className="font-medium text-teal-600">{diag.confianza}% confianza</div>
                         <div className="text-sm text-gray-500">
-                          {new Date(diag.fecha).toLocaleDateString()}
+                          {new Date(diag.fecha_diagnostico).toLocaleDateString()}
                         </div>
                       </div>
                     </div>

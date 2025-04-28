@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -22,42 +22,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Search, Edit, Trash2, FileText, ChevronLeft, ChevronRight, UserPlus } from "lucide-react"
 
-// Datos simulados para la tabla
-const pacientesSimulados = Array.from({ length: 50 }).map((_, i) => {
-  const id = `PAC-${1000 + i}`
-  const generos = ["Masculino", "Femenino"]
-  const nombres = ["Juan", "María", "Carlos", "Ana", "Luis", "Laura", "Pedro", "Sofía"]
-  const apellidos = ["García", "Rodríguez", "López", "Martínez", "González", "Pérez", "Sánchez", "Fernández"]
-
-  const nombre = nombres[Math.floor(Math.random() * nombres.length)]
-  const apellido = apellidos[Math.floor(Math.random() * apellidos.length)]
-  const edad = Math.floor(Math.random() * 70) + 18
-  const genero = generos[Math.floor(Math.random() * generos.length)]
-
-  const fechaRegistro = new Date()
-  fechaRegistro.setDate(fechaRegistro.getDate() - Math.floor(Math.random() * 365))
-
-  const ultimoDiagnostico = Math.random() > 0.3 ? new Date() : null
-  if (ultimoDiagnostico) {
-    ultimoDiagnostico.setDate(ultimoDiagnostico.getDate() - Math.floor(Math.random() * 60))
-  }
-
-  return {
-    id,
-    nombre,
-    apellido,
-    nombreCompleto: `${nombre} ${apellido}`,
-    edad,
-    genero,
-    fechaRegistro: fechaRegistro.toISOString().split("T")[0],
-    ultimoDiagnostico: ultimoDiagnostico ? ultimoDiagnostico.toISOString().split("T")[0] : null,
-    diagnosticosTotales: ultimoDiagnostico ? Math.floor(Math.random() * 10) + 1 : 0,
-  }
-})
+import { getPacientes } from "@/lib/db"
+import { AuthContext } from "@/context/AuthContext"
+import { useToast } from "@/components/ui/use-toast"
+import { cn } from "@/lib/utils"
+import Link from "next/link"
 
 export default function PacientesPage() {
+  const { user } = React.useContext(AuthContext)
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
+  const [pacientes, setPacientes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [newPatient, setNewPatient] = useState({
     nombre: "",
@@ -69,12 +46,33 @@ export default function PacientesPage() {
     direccion: "",
   })
 
+  const { toast } = useToast()
+
   const itemsPerPage = 10
 
-  // Filtrar pacientes
-  const filteredPacientes = pacientesSimulados.filter((paciente) => {
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const pacientesData = await getPacientes()
+        setPacientes(pacientesData)
+      } catch (error) {
+        setError("Error al cargar los pacientes.")
+        toast({
+          variant: "destructive",
+          title: "Error.",
+          description: "Error al cargar los pacientes.",
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  const filteredPacientes = pacientes.filter((paciente) => {
     return (
-      paciente.nombreCompleto.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (paciente.primer_nombre + " " + paciente.primer_apellido).toLowerCase().includes(searchTerm.toLowerCase()) ||
       paciente.id.toLowerCase().includes(searchTerm.toLowerCase())
     )
   })
@@ -103,8 +101,23 @@ export default function PacientesPage() {
     setNewPatient((prev) => ({ ...prev, [id]: value }))
   }
 
-  return (
-    <div className="space-y-6">
+  if (!user) {
+    return <div>No se pudo obtener la informacion del usuario.</div>
+  }
+
+  if (user.rol !== "admin" && user.rol !== "medico") {
+    return <div>No tiene permisos para acceder a esta pagina.</div>
+  }
+
+  if (loading) {
+    return <div>Cargando...</div>
+  }
+
+  if (error) {
+    return <div>{error}</div>
+  }
+
+  return (<div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">Pacientes</h1>
@@ -222,20 +235,20 @@ export default function PacientesPage() {
                     {paginatedPacientes.length > 0 ? (
                       paginatedPacientes.map((paciente) => (
                         <TableRow key={paciente.id}>
-                          <TableCell className="font-medium">{paciente.id}</TableCell>
-                          <TableCell>{paciente.nombreCompleto}</TableCell>
-                          <TableCell>{paciente.edad}</TableCell>
-                          <TableCell>{paciente.genero}</TableCell>
-                          <TableCell>{paciente.fechaRegistro}</TableCell>
+                          <TableCell className="font-medium">{paciente.id_usuario}</TableCell>
+                          <TableCell>{paciente.primer_nombre + " " + paciente.primer_apellido}</TableCell>
+                          <TableCell>{paciente.edad || "N/A"}</TableCell>
+                          <TableCell>{paciente.genero || "N/A"}</TableCell>
+                          <TableCell>{paciente.fecha_registro || "N/A"}</TableCell>
                           <TableCell>
-                            {paciente.ultimoDiagnostico ? (
-                              paciente.ultimoDiagnostico
+                            {paciente.ultimo_diagnostico ? (
+                              paciente.ultimo_diagnostico
                             ) : (
                               <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
                                 Sin diagnóstico
                               </Badge>
                             )}
-                          </TableCell>
+                          </TableCell>     
                           <TableCell>{paciente.diagnosticosTotales}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end space-x-1">
@@ -268,7 +281,7 @@ export default function PacientesPage() {
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-gray-500">
                     Mostrando {(currentPage - 1) * itemsPerPage + 1} a{" "}
-                    {Math.min(currentPage * itemsPerPage, filteredPacientes.length)} de {filteredPacientes.length}{" "}
+                    {Math.min(currentPage * itemsPerPage, filteredPacientes.length)} de {filteredPacientes.length}
                     pacientes
                   </div>
                   <div className="flex items-center space-x-2">

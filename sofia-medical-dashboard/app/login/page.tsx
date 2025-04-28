@@ -1,16 +1,20 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { EyeIcon, EyeOffIcon } from "lucide-react"
+import { initializeApp } from "firebase/app"
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth"
 import Link from "next/link"
 import Image from "next/image"
+
+const firebaseConfig = {
+  // Add your configuration here
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -19,33 +23,28 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const app = initializeApp(firebaseConfig)
+  const auth = getAuth(app)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
     setError("")
 
-    // Simulación de autenticación
     try {
-      // En un caso real, aquí iría la llamada a la API de autenticación
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Validar credenciales por defecto o usuarios registrados
-      const users = JSON.parse(localStorage.getItem("sofia-users") || "[]")
-      const validUser = 
-        (email === "doctor@sofia.ai" && password === "password") ||
-        users.some((user: any) => user.email === email && user.password === password)
-
-      if (validUser) {
-        // Guardar token en localStorage (simulado)
-        localStorage.setItem("auth-token", "fake-jwt-token")
-        localStorage.setItem("current-user", email)
-        router.push("/dashboard")
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      const user = userCredential.user
+      localStorage.setItem("userId", user.uid)
+      localStorage.setItem("currentUserEmail", user.email ?? "")
+      router.push("/dashboard")
+    } catch (err: any) {
+      if (err.code === "auth/invalid-credential") {
+        setError("Credenciales incorrectas. Verifique su correo y contraseña.")
+      } else if (err.code === "auth/invalid-login-credentials") {
+        setError("Credenciales incorrectas. Verifique su correo y contraseña.")
       } else {
-        setError("Credenciales incorrectas. Intente con doctor@sofia.ai / password o use sus credenciales registradas")
+        setError("Error al iniciar sesión. Por favor intente nuevamente.")
       }
-    } catch (err) {
-      setError("Error al iniciar sesión. Por favor intente nuevamente.")
     } finally {
       setIsLoading(false)
     }
@@ -86,7 +85,7 @@ export default function LoginPage() {
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Contraseña</Label>
                 <Link href="#" className="text-xs text-teal-600 hover:text-teal-800">
-                  ¿Olvidó su contraseña?
+                  Recuperar Contraseña
                 </Link>
               </div>
               <div className="relative">
@@ -112,15 +111,16 @@ export default function LoginPage() {
               {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
             </Button>
           </form>
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-4">
-          <div className="text-center text-sm">
-            ¿No tiene una cuenta?{" "}
-            <Link href="/register" className="font-medium text-teal-600 hover:text-teal-800">
-              Registrarse
-            </Link>
+          <div className="mt-4 text-center">
+            <Button variant="link" onClick={() => router.back()} className="font-medium text-teal-600 hover:text-teal-800">
+              Atrás
+            </Button>
           </div>
-          <div className="text-center text-xs text-gray-500">Para demostración, use: doctor@sofia.ai / password</div>
+        </CardContent>
+        <CardFooter className="flex flex-col space-y-2">
+          <div className="text-center text-sm">
+            ¿No tiene una cuenta? <Link href="/register" className="font-medium text-teal-600 hover:text-teal-800">Registrarse</Link>
+          </div>
         </CardFooter>
       </Card>
     </div>

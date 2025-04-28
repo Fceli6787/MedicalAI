@@ -1,17 +1,20 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { getDiagnosticos } from "@/lib/utils"
+import { useState, useEffect, useContext } from "react"
+import { getDiagnosticos } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Search, Calendar, Filter, Download, Eye, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, Calendar, Filter, Download, Eye, ArrowUpDown, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react"
+import { AuthContext } from "@/context/AuthContext"
 
 export default function HistorialPage() {
   const [diagnosticos, setDiagnosticos] = useState<any[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const { user } = useContext(AuthContext)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -28,10 +31,11 @@ export default function HistorialPage() {
     const loadDiagnosticos = async () => {
       try {
         const data = await getDiagnosticos()
-        setDiagnosticos(data)
+        setDiagnosticos(data || [])
       } catch (error) {
-        console.error("Error cargando diagnósticos:", error)
+        setError("Error al cargar los diagnosticos.")
       } finally {
+        
         setLoading(false)
       }
     }
@@ -99,6 +103,19 @@ export default function HistorialPage() {
     // debe ser manejado por el componente de layout que envuelve esta página.
     <div className="space-y-6 w-full px-6">
       <div>
+
+            {user && !user.role && (
+              <div className="rounded-md border p-4 flex items-center justify-center gap-2 text-red-500">
+                <AlertCircle />
+                No tienes permisos para ver esta informacion.
+              </div>
+            )}
+        {error && (
+            <div className="rounded-md border p-4 flex items-center justify-center gap-2 text-red-500">
+                <AlertCircle />
+                {error}
+              </div>
+            )}
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Historial de Diagnósticos</h1>
         <p className="text-gray-500">Consulte y gestione los diagnósticos realizados</p>
       </div>
@@ -214,13 +231,13 @@ export default function HistorialPage() {
                       Cargando diagnósticos...
                     </TableCell>
                   </TableRow>
-                ) : paginatedDiagnosticos.length > 0 ? (
+                ) : user?.role && paginatedDiagnosticos.length > 0 ? (
                   paginatedDiagnosticos.map((diag) => (
-                    <TableRow key={diag.id}>
-                      <TableCell className="font-medium">{diag.id}</TableCell>
-                      <TableCell>{diag.pacienteNombre}</TableCell>
+                    <TableRow key={diag.id_diagnostico}>
+                      <TableCell className="font-medium">{diag.id_diagnostico}</TableCell>
+                      <TableCell>{diag.pacienteId}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1">
                           <Calendar className="h-3.5 w-3.5 text-gray-500" />
                           <span>{diag.fecha}</span>
                         </div>
@@ -246,7 +263,7 @@ export default function HistorialPage() {
                         <Button variant="ghost" size="icon">
                           <Eye className="h-4 w-4" />
                         </Button>
-                      </TableCell>
+                        </TableCell>
                     </TableRow>
                   ))
                 ) : (
