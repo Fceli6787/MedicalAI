@@ -47,7 +47,7 @@ export default function LoginPage() {
       <Card className="mx-auto w-full max-w-md border-teal-100 shadow-lg">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center">
-            <Image src="/placeholder.svg?height=64&width=64" alt="SOFIA AI Medical Logo" width={64} height={64} className="rounded-xl bg-teal-500 p-2" />
+              <Image src="/Logo_sofia.png" alt="SOFIA AI Medical Logo" width={120} height={120}/>
           </div>
           <CardTitle className="text-2xl font-bold text-teal-800">Iniciar Sesión</CardTitle>
           <CardDescription>Ingrese sus credenciales para acceder al sistema</CardDescription>{" "}
@@ -79,4 +79,3 @@ export default function LoginPage() {
     </div>
   )
 }
-

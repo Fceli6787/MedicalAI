@@ -1,14 +1,17 @@
 "use client"
 
 import { useState, useEffect, useContext } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
 import { Activity, Users, Clock, BarChart3, TrendingUp, AlertTriangle } from "lucide-react"
-import { getDiagnosticos, getPacientes, getUsers } from "@/lib/db"
-import { AuthContext } from "@/context/AuthContext"
+import { AuthContext } from "../../context/AuthContext"
 
 export default function DashboardPage() {
-  const { user } = useContext(AuthContext)
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  const { user } = context;
   const [diagnosticos, setDiagnosticos] = useState<any[]>([])
   const [pacientes, setPacientes] = useState<any[]>([])
   const [usuarios, setUsuarios] = useState<any[]>([])
@@ -24,27 +27,13 @@ export default function DashboardPage() {
       setLoadingUsuarios(true)
       try {
         const [usuariosData, pacientesData, diagnosticosData] = await Promise.all([
-          getUsers(),
-          getPacientes(),
-          getDiagnosticos()
+          fetch('/api/dashboard/users').then(res => res.json()),
+          fetch('/api/dashboard/pacientes').then(res => res.json()),
+          fetch('/api/dashboard/diagnosticos').then(res => res.json())
         ])
         setUsuarios(usuariosData)
         setPacientes(pacientesData)
         setDiagnosticos(diagnosticosData)
-        const [
-          diagnosticos,
-          pacientes,
-          precision,
-          ultimos
-        ] = await Promise.all([
-          getTotalDiagnosticos(),
-          getTotalPacientes(),
-          getPrecisionPromedio(),
-          getUltimosDiagnosticos()
-        ])
-
-        
-       
       } catch (error) {
         console.error("Error cargando datos del dashboard:", error)
         setError("Error al cargar los datos")
@@ -57,27 +46,25 @@ export default function DashboardPage() {
     cargarDatos()
   }, [])
   
-  
-    if (!user) {
-      return (
-        <div className="flex items-center justify-center h-screen">
-          <AlertTriangle className="h-10 w-10 text-red-500 mr-2" />
-          <p className="text-red-500 text-xl">No tienes permiso para ver esta pagina</p>
-        </div>
-      )
-    }
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <AlertTriangle className="h-10 w-10 text-red-500 mr-2" />
+        <p className="text-red-500 text-xl">No tienes permiso para ver esta pagina</p>
+      </div>
+    )
+  }
 
-    if (error) {
-      return (
-        <div className="flex items-center justify-center h-screen">
-          <AlertTriangle className="h-10 w-10 text-red-500 mr-2" />
-          <p className="text-red-500 text-xl">{error}</p>
-        </div>
-      )
-    }
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <AlertTriangle className="h-10 w-10 text-red-500 mr-2" />
+        <p className="text-red-500 text-xl">{error}</p>
+      </div>
+    )
+  }
 
   const precisionPromedio = 85 // Example percentage, you can modify it
-
 
   // Amount to shift children left relative to container
   const shiftClass = "transform -translate-x-24"
@@ -88,7 +75,7 @@ export default function DashboardPage() {
       {/* Title section shifted left */}
       <div className={`${shiftClass} flex items-center justify-between`}>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
-        <p>Bienvenido {user?.name}</p>
+        <p>Bienvenido {user?.primer_nombre}</p>
         <div className="flex items-center gap-2">
           <img src="Logo_sofia.png" alt="SOFIA AI" className="h-8" />
           <span className="text-gray-500">Medical</span>
@@ -100,11 +87,11 @@ export default function DashboardPage() {
          {[{
           title: 'Diagnósticos Totales', value: loadingDiagnosticos ? '...' : diagnosticos.length.toLocaleString(), icon: <Activity className="h-4 w-4 text-teal-600" />, description: 'Total acumulado'
         },{
-          title: 'Pacientes Registrados', value: loading ? '...' : totalPacientes.toLocaleString(), icon: <Users className="h-4 w-4 text-teal-600" />, description: 'Pacientes únicos'
+          title: 'Pacientes Registrados', value: loadingPacientes ? '...' : (Array.isArray(pacientes) ? pacientes.length.toLocaleString() : '0'), icon: <Users className="h-4 w-4 text-teal-600" />, description: 'Pacientes únicos'
         }, {
-          title: 'Tiempo Promedio', value: loading ? '...' : '2.4s', icon: <Clock className="h-4 w-4 text-teal-600" />, description: 'Tiempo estimado'
+          title: 'Tiempo Promedio', value: loadingPacientes ? '...' : '2.4s', icon: <Clock className="h-4 w-4 text-teal-600" />, description: 'Tiempo estimado'
         }, {
-          title: 'Precisión', value: loading ? '...' : `${precisionPromedio}%`, icon: <BarChart3 className="h-4 w-4 text-teal-600" />, description: 'Precisión promedio'
+          title: 'Precisión', value: loadingPacientes ? '...' : `${precisionPromedio}%`, icon: <BarChart3 className="h-4 w-4 text-teal-600" />, description: 'Precisión promedio'
         }].map((metric, idx) => (
           <Card key={idx} className={`${shiftClass} border-teal-100 rounded-lg shadow-sm pl-4`}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -140,7 +127,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {loading ? (
+                {loadingDiagnosticos ? (
                   <div className="h-24 flex items-center justify-center" >
                     <p className="text-gray-500">Cargando diagnósticos...</p>
                   </div>

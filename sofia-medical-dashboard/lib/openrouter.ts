@@ -48,6 +48,11 @@ export interface OpenRouterImageResponse {
   condition: string;
   confidence: number;
   description: string;
+  recomendaciones: string[]; // Add recommendations property
+  pronostico?: { // Add optional prognosis property
+    tiempo_recuperacion?: string;
+    probabilidad_mejoria?: string;
+  };
 }
 
 export async function analyzeImageWithOpenRouter(imageBase64: string): Promise<OpenRouterImageResponse> {
@@ -61,7 +66,7 @@ export async function analyzeImageWithOpenRouter(imageBase64: string): Promise<O
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "qwen/qwen2.5-vl-72b-instruct:free",
+        model: "google/gemma-3-27b-it:free",
         messages: [
           {
             role: "system",
@@ -88,6 +93,8 @@ export async function analyzeImageWithOpenRouter(imageBase64: string): Promise<O
 
     const data = await response.json();
 
+    console.log("Respuesta cruda de OpenRouter:", JSON.stringify(data, null, 2));
+
     // Verificar si hay error de límite de créditos
     if (!response.ok) {
       if (data.error?.includes("Rate limit exceeded: free-models-per-day")) {
@@ -105,27 +112,33 @@ export async function analyzeImageWithOpenRouter(imageBase64: string): Promise<O
     }
 
     try {
+      // Extraer el JSON del bloque de código Markdown si existe
+      const content = data.choices[0].message.content;
+      const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
+      let jsonString = content;
+
+      if (jsonMatch && jsonMatch[1]) {
+        jsonString = jsonMatch[1];
+      }
+
       // Intentar parsear la respuesta como JSON estructurado
-      const structuredResponse = JSON.parse(data.choices[0].message.content);
+      const structuredResponse = JSON.parse(jsonString);
       return {
         condition: structuredResponse.diagnostico.condicion,
-        confidence: 95,
-        description: `${structuredResponse.diagnostico.hallazgos.join(". ")}
-        
-Recomendaciones:
-${structuredResponse.recomendaciones.join("\n")}
-
-Pronóstico:
-Tiempo estimado de recuperación: ${structuredResponse.pronostico.tiempo_recuperacion}
-Probabilidad de mejoría: ${structuredResponse.pronostico.probabilidad_mejoria}`
+        confidence: 95, // Assuming a fixed confidence for now
+        description: structuredResponse.diagnostico.hallazgos.join(". "), // Keep findings in description or adjust as needed
+        recomendaciones: structuredResponse.recomendaciones, // Include recommendations as an array
+        pronostico: structuredResponse.pronostico // Include prognosis
       };
     } catch (parseError) {
       // Si no se puede parsear como JSON, usar la respuesta directa
       console.log("No se pudo parsear como JSON estructurado, usando respuesta directa");
       return {
         condition: "Análisis Completado",
-        confidence: 95,
-        description: data.choices[0].message.content || "No se pudo obtener una descripción"
+        confidence: 95, // Assuming a fixed confidence for now
+        description: data.choices[0].message.content || "No se pudo obtener una descripción",
+        recomendaciones: [], // Provide empty array if parsing fails
+        pronostico: undefined // Provide undefined prognosis
       };
     }
   } catch (error) {

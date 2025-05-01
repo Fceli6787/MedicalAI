@@ -1,6 +1,6 @@
 -- Crear base de datos
 CREATE DATABASE SOFIAMedicalAI;
-USE SOFIAMedicalAI;
+USE DATABASE SOFIAMedicalAI;
 
 -- Tabla: TiposDocumento
 CREATE TABLE TiposDocumento (
@@ -45,7 +45,7 @@ CREATE TABLE Usuarios (
     primer_apellido VARCHAR(50) NOT NULL,
     segundo_apellido VARCHAR(50),
     correo VARCHAR(255) NOT NULL UNIQUE,
-    firebase_uid VARCHAR(255) UNIQUE,
+    firebase_uid VARCHAR(255) NULL,
     fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
     ultima_actividad DATETIME,
     estado ENUM('Activo', 'Inactivo', 'Bloqueado') DEFAULT 'Activo',
@@ -75,25 +75,14 @@ CREATE TABLE SesionesUsuario (
     FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario)
 );
 
--- Tabla: ResetCodes (Para recuperación de contraseña)
-CREATE TABLE ResetCodes (
-    id_reset INT PRIMARY KEY AUTO_INCREMENT,
-    id_usuario INT NOT NULL,
-    codigo VARCHAR(6) NOT NULL,
-    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fecha_expiracion TIMESTAMP NULL,
-    usado BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario)
-);
-
 -- Tabla: Medicos
 CREATE TABLE Medicos (
-    id_medico INT PRIMARY KEY,
+    id_usuario INT PRIMARY KEY,
     id_especialidad INT NOT NULL,
     numero_tarjeta_profesional VARCHAR(50) NOT NULL UNIQUE,
     fecha_ingreso DATE NOT NULL,
     años_experiencia INT,
-    FOREIGN KEY (id_medico) REFERENCES Usuarios(id_usuario),
+    FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario),
     FOREIGN KEY (id_especialidad) REFERENCES Especialidades(id_especialidad)
 );
 
@@ -105,17 +94,25 @@ CREATE TABLE HistorialMedicoEspecialidades (
     fecha_fin DATE,
     certificado_url VARCHAR(512),
     PRIMARY KEY (id_medico, id_especialidad, fecha_inicio),
-    FOREIGN KEY (id_medico) REFERENCES Medicos(id_medico),
+    FOREIGN KEY (id_medico) REFERENCES Medicos(id_usuario),  -- Corregido: Referencia a la clave primaria correcta
     FOREIGN KEY (id_especialidad) REFERENCES Especialidades(id_especialidad)
 );
 
 -- Tabla: Pacientes
 CREATE TABLE Pacientes (
-    id_paciente INT PRIMARY KEY,
+    id_usuario INT PRIMARY KEY,
     grupo_sanguineo VARCHAR(5),
     alergias TEXT,
     antecedentes_medicos TEXT,
-    FOREIGN KEY (id_paciente) REFERENCES Usuarios(id_usuario)
+    telefono_contacto VARCHAR(20),
+    direccion_residencial TEXT,
+    fecha_nacimiento DATE,
+    genero VARCHAR(20),
+    ocupacion VARCHAR(100),
+    info_seguro_medico TEXT,
+    contacto_emergencia VARCHAR(100),
+    historial_visitas TEXT,
+    FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario)
 );
 
 -- Tabla: TiposExamen
@@ -136,8 +133,8 @@ CREATE TABLE Diagnosticos (
     nivel_confianza DECIMAL(5, 2) NOT NULL,
     fecha_diagnostico DATETIME DEFAULT CURRENT_TIMESTAMP,
     estado ENUM('Pendiente', 'Completado', 'Anulado') DEFAULT 'Pendiente',
-    FOREIGN KEY (id_paciente) REFERENCES Pacientes(id_paciente),
-    FOREIGN KEY (id_medico) REFERENCES Medicos(id_medico),
+    FOREIGN KEY (id_paciente) REFERENCES Pacientes(id_usuario),
+    FOREIGN KEY (id_medico) REFERENCES Medicos(id_usuario),
     FOREIGN KEY (id_tipo_examen) REFERENCES TiposExamen(id_tipo_examen)
 );
 
@@ -216,6 +213,26 @@ CREATE TABLE Notificaciones (
     FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario)
 );
 
+-- Índices para optimizar consultas
+CREATE INDEX idx_notificaciones_usuario_estado ON Notificaciones(id_usuario, estado);
+CREATE INDEX idx_notificaciones_fecha ON Notificaciones(fecha_creacion);
+CREATE INDEX idx_sesiones_usuario ON SesionesUsuario(id_usuario);
+CREATE INDEX idx_sesiones_expiracion ON SesionesUsuario(fecha_expiracion);
+
+-- Tabla: ResetCodes (Agregada para manejar códigos de restablecimiento de contraseña)
+CREATE TABLE ResetCodes (
+    id_reset INT PRIMARY KEY AUTO_INCREMENT,
+    id_usuario INT NOT NULL,
+    codigo VARCHAR(255) NOT NULL,
+    fecha_expiracion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    estado ENUM('Activo', 'Usado', 'Expirado') DEFAULT 'Activo',
+    FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario)
+);
+
+-- Índices para ResetCodes después de crear la tabla
+CREATE INDEX idx_reset_codigo ON ResetCodes(codigo);
+CREATE INDEX idx_reset_usuario ON ResetCodes(id_usuario);
+
 -- Insertar roles básicos
 INSERT INTO Roles (nombre, descripcion) VALUES
 ('admin', 'Administrador del sistema'),
@@ -250,11 +267,3 @@ INSERT INTO TiposNotificacion (nombre, plantilla, icono, color) VALUES
 ('ResultadosDisponibles', 'Los resultados del análisis de {paciente} están disponibles para revisión.', 'clipboard-list', '#2563eb'),
 ('RecordatorioCita', 'Recordatorio: Tiene una cita programada con {paciente} para {fecha}.', 'calendar', '#d97706'),
 ('ActualizacionSistema', 'Se ha realizado una actualización importante en el sistema: {mensaje}', 'info-circle', '#6366f1');
-
--- Índices para optimizar consultas
-CREATE INDEX idx_notificaciones_usuario_estado ON Notificaciones(id_usuario, estado);
-CREATE INDEX idx_notificaciones_fecha ON Notificaciones(fecha_creacion);
-CREATE INDEX idx_sesiones_usuario ON SesionesUsuario(id_usuario);
-CREATE INDEX idx_sesiones_expiracion ON SesionesUsuario(fecha_expiracion);
-CREATE INDEX idx_reset_codigo ON ResetCodes(codigo);
-CREATE INDEX idx_reset_usuario ON ResetCodes(id_usuario);
