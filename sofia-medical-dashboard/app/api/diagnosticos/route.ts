@@ -1,51 +1,49 @@
-import { NextResponse } from 'next/server'
-import fs from 'fs'
-import path from 'path'
-import { v4 as uuidv4 } from 'uuid'
-
-const DB_PATH = path.join(process.cwd(), 'lib/database.json')
-const IMG_DIR = path.join(process.cwd(), 'public/img-diagnosticos')
+import { NextResponse } from 'next/server';
+import { getDiagnosticos, addDiagnostico } from '@/lib/db'; // Importar funciones de lib/db
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData()
-    const file = formData.get('imagen') as File | null
-    const diagnosticoData = JSON.parse(formData.get('diagnostico') as string)
+    const formData = await request.formData();
+    // La lógica de manejo de imágenes debe ser adaptada si se desea guardar en la DB.
+    // Por ahora, solo procesaremos los datos del diagnóstico.
+    const diagnosticoData = JSON.parse(formData.get('diagnostico') as string);
 
-    // Generar nombre único para la imagen
-    const imagenNombre = `diag-${uuidv4()}.${file?.name.split('.').pop()}`
-    const imagenPath = path.join(IMG_DIR, imagenNombre)
-
-    // Guardar imagen si existe
-    if (file) {
-      const buffer = Buffer.from(await file.arrayBuffer())
-      fs.writeFileSync(imagenPath, buffer)
-      diagnosticoData.imagen = `/img-diagnosticos/${imagenNombre}`
+    // Validar datos requeridos para addDiagnostico
+    if (!diagnosticoData.id_paciente || !diagnosticoData.tipoExamenNombre || !diagnosticoData.resultado || diagnosticoData.nivel_confianza === undefined || !diagnosticoData.id_medico) {
+       return NextResponse.json({ error: 'Faltan campos obligatorios para el diagnóstico' }, { status: 400 });
     }
 
-    // Guardar en base de datos
-    const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'))
-    db.diagnosticos.push(diagnosticoData)
-    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2))
+    // Llamar a la función addDiagnostico de lib/db.ts
+    await addDiagnostico({
+      id_paciente: diagnosticoData.id_paciente,
+      id_medico: diagnosticoData.id_medico,
+      tipoExamenNombre: diagnosticoData.tipoExamenNombre,
+      resultado: diagnosticoData.resultado,
+      nivel_confianza: diagnosticoData.nivel_confianza,
+    });
 
-    return NextResponse.json(diagnosticoData)
-  } catch (error) {
-    console.error('Error:', error)
+    // Respuesta exitosa
+    return NextResponse.json({ message: 'Diagnóstico guardado exitosamente en la base de datos' }, { status: 201 });
+
+  } catch (error: any) {
+    console.error('Error en el handler POST de diagnosticos:', error);
     return NextResponse.json(
-      { error: 'Error al guardar el diagnóstico' },
+      { error: error.message || 'Error al guardar el diagnóstico en la base de datos' },
       { status: 500 }
-    )
+    );
   }
 }
 
 export async function GET() {
   try {
-    const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'))
-    return NextResponse.json(db.diagnosticos)
-  } catch (error) {
+    // Llamar a la función getDiagnosticos de lib/db.ts
+    const diagnosticos = await getDiagnosticos();
+    return NextResponse.json(diagnosticos);
+  } catch (error: any) {
+    console.error('Error fetching diagnosticos:', error);
     return NextResponse.json(
-      { error: 'Error al leer los diagnósticos' },
+      { error: error.message || 'Error al leer los diagnósticos de la base de datos' },
       { status: 500 }
-    )
+    );
   }
 }

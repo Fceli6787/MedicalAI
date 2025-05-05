@@ -7,11 +7,11 @@ import { Activity, Users, Clock, BarChart3, TrendingUp, AlertTriangle } from "lu
 import { AuthContext } from "../../context/AuthContext"
 
 export default function DashboardPage() {
-  const context = useContext(AuthContext);
+  const context = useContext(AuthContext)
   if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error("useAuth must be used within an AuthProvider")
   }
-  const { user } = context;
+  const { user } = context
   const [diagnosticos, setDiagnosticos] = useState<any[]>([])
   const [pacientes, setPacientes] = useState<any[]>([])
   const [usuarios, setUsuarios] = useState<any[]>([])
@@ -27,9 +27,9 @@ export default function DashboardPage() {
       setLoadingUsuarios(true)
       try {
         const [usuariosData, pacientesData, diagnosticosData] = await Promise.all([
-          fetch('/api/dashboard/users').then(res => res.json()),
-          fetch('/api/dashboard/pacientes').then(res => res.json()),
-          fetch('/api/dashboard/diagnosticos').then(res => res.json())
+          fetch("/api/dashboard/users").then((res) => res.json()),
+          fetch("/api/dashboard/pacientes").then((res) => res.json()),
+          fetch("/api/dashboard/diagnosticos").then((res) => res.json()),
         ])
         setUsuarios(usuariosData)
         setPacientes(pacientesData)
@@ -45,7 +45,7 @@ export default function DashboardPage() {
     }
     cargarDatos()
   }, [])
-  
+
   if (!user) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -71,9 +71,9 @@ export default function DashboardPage() {
   const recentDiagShiftClass = "transform -translate-x-4"
 
   return (
-    <div className="space-y-6 w-full pl-48 pr-8 overflow-x-hidden">
+    <div className="space-y-6 w-full px-6 py-8 overflow-x-hidden">
       {/* Title section shifted left */}
-      <div className={`${shiftClass} flex items-center justify-between`}>
+      <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
         <p>Bienvenido {user?.primer_nombre}</p>
         <div className="flex items-center gap-2">
@@ -84,24 +84,39 @@ export default function DashboardPage() {
 
       {/* Metric cards shifted left */}
       <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-         {[{
-          title: 'Diagnósticos Totales', value: loadingDiagnosticos ? '...' : diagnosticos.length.toLocaleString(), icon: <Activity className="h-4 w-4 text-teal-600" />, description: 'Total acumulado'
-        },{
-          title: 'Pacientes Registrados', value: loadingPacientes ? '...' : (Array.isArray(pacientes) ? pacientes.length.toLocaleString() : '0'), icon: <Users className="h-4 w-4 text-teal-600" />, description: 'Pacientes únicos'
-        }, {
-          title: 'Tiempo Promedio', value: loadingPacientes ? '...' : '2.4s', icon: <Clock className="h-4 w-4 text-teal-600" />, description: 'Tiempo estimado'
-        }, {
-          title: 'Precisión', value: loadingPacientes ? '...' : `${precisionPromedio}%`, icon: <BarChart3 className="h-4 w-4 text-teal-600" />, description: 'Precisión promedio'
-        }].map((metric, idx) => (
-          <Card key={idx} className={`${shiftClass} border-teal-100 rounded-lg shadow-sm pl-4`}>
+        {[
+          {
+            title: "Diagnósticos Totales",
+            value: loadingDiagnosticos ? "..." : diagnosticos.length.toLocaleString(),
+            icon: <Activity className="h-4 w-4 text-teal-600" />,
+            description: "Total acumulado",
+          },
+          {
+            title: "Pacientes Registrados",
+            value: loadingPacientes ? "..." : Array.isArray(pacientes) ? pacientes.length.toLocaleString() : "0",
+            icon: <Users className="h-4 w-4 text-teal-600" />,
+            description: "Pacientes únicos",
+          },
+          {
+            title: "Tiempo Promedio",
+            value: loadingPacientes ? "..." : "2.4s",
+            icon: <Clock className="h-4 w-4 text-teal-600" />,
+            description: "Tiempo estimado",
+          },
+          {
+            title: "Precisión",
+            value: loadingPacientes ? "..." : `${precisionPromedio}%`,
+            icon: <BarChart3 className="h-4 w-4 text-teal-600" />,
+            description: "Precisión promedio",
+          },
+        ].map((metric, idx) => (
+          <Card key={idx} className="border-teal-100 rounded-lg shadow-sm pl-4">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-gray-500">{metric.title}</CardTitle>
               {metric.icon}
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-900">
-                {metric.value}
-              </div>
+              <div className="text-2xl font-bold text-gray-900">{metric.value}</div>
               <p className="text-xs text-gray-500">{metric.description}</p>
             </CardContent>
           </Card>
@@ -109,18 +124,24 @@ export default function DashboardPage() {
       </div>
 
       {/* Tabs shifted left */}
-      <Tabs defaultValue="recientes" className={`${shiftClass} space-y-4`}>
+      <Tabs defaultValue="recientes" className="space-y-4">
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="recientes" className="px-4 py-2 rounded-md hover:bg-gray-100 transition-colors duration-150">
+          <TabsTrigger
+            value="recientes"
+            className="px-4 py-2 rounded-md hover:bg-gray-100 transition-colors duration-150"
+          >
             Diagnósticos Recientes
           </TabsTrigger>
-          <TabsTrigger value="estadisticas" className="px-4 py-2 rounded-md hover:bg-gray-100 transition-colors duration-150">
+          <TabsTrigger
+            value="estadisticas"
+            className="px-4 py-2 rounded-md hover:bg-gray-100 transition-colors duration-150"
+          >
             Estadísticas
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="recientes" className="space-y-4">
-          <Card className={`${recentDiagShiftClass} border-teal-100 rounded-lg shadow-sm pl-4`}>
+          <Card className="border-teal-100 rounded-lg shadow-sm pl-4">
             <CardHeader>
               <CardTitle>Diagnósticos Recientes</CardTitle>
               <CardDescription>Los últimos 5 diagnósticos realizados en el sistema</CardDescription>
@@ -128,7 +149,7 @@ export default function DashboardPage() {
             <CardContent>
               <div className="space-y-4">
                 {loadingDiagnosticos ? (
-                  <div className="h-24 flex items-center justify-center" >
+                  <div className="h-24 flex items-center justify-center">
                     <p className="text-gray-500">Cargando diagnósticos...</p>
                   </div>
                 ) : diagnosticos.length > 0 ? (
@@ -142,7 +163,9 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-medium truncate">{diag.pacienteNombre}</div>
-                        <div className="text-sm text-gray-500 truncate">{diag.tipo} - {diag.region}</div>
+                        <div className="text-sm text-gray-500 truncate">
+                          {diag.tipo} - {diag.region}
+                        </div>
                       </div>
                       <div className="text-right">
                         <div className="font-medium text-teal-600">{diag.confianza}% confianza</div>
@@ -163,7 +186,7 @@ export default function DashboardPage() {
         </TabsContent>
 
         <TabsContent value="estadisticas" className="space-y-4">
-          <Card className={`${shiftClass} border-teal-100 rounded-lg shadow-sm pl-4`}>
+          <Card className="border-teal-100 rounded-lg shadow-sm pl-4">
             <CardHeader>
               <CardTitle>Estadísticas de Uso</CardTitle>
               <CardDescription>Análisis de uso del sistema en los últimos 30 días</CardDescription>

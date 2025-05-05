@@ -97,7 +97,7 @@ export default function HistorialPage() {
     const { key, direction } = sortConfig
 
     const aValue = a[key as keyof typeof a] ?? ""
-    const bValue = b[key as keyof typeof b] ?? ""
+    const bValue = b[key as keyof typeof a] ?? ""
 
     if (aValue < bValue) {
       return direction === "ascending" ? -1 : 1
@@ -149,7 +149,7 @@ export default function HistorialPage() {
   }
 
   return (
-    <div className="w-full px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="w-full h-full py-8 pr-0 pl-6 space-y-8 max-w-none">
       {/* Page header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -194,7 +194,7 @@ export default function HistorialPage() {
       ) : (
         <>
           {/* Filters card */}
-          <Card className="border-teal-100 shadow-sm">
+          <Card className="border-teal-100 shadow-sm w-full" style={{ width: "100%", maxWidth: "100%" }}>
             <CardHeader className="bg-teal-50/50 border-b border-teal-100">
               <CardTitle className="flex items-center text-teal-800">
                 <Filter className="h-5 w-5 mr-2 text-teal-600" />
@@ -254,7 +254,7 @@ export default function HistorialPage() {
           </Card>
 
           {/* Results card */}
-          <Card className="border-teal-100 shadow-sm">
+          <Card className="border-teal-100 shadow-sm w-full" style={{ width: "100%", maxWidth: "100%" }}>
             <CardHeader className="bg-teal-50/50 border-b border-teal-100">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center text-teal-800">
@@ -295,9 +295,9 @@ export default function HistorialPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="rounded-md overflow-hidden">
-                <div className="overflow-x-auto">
-                  <Table>
+              <div className="rounded-md overflow-hidden w-full">
+                <div className="overflow-x-auto w-full">
+                  <Table className="w-full table-fixed">
                     <TableHeader className="bg-gray-50">
                       <TableRow>
                         <TableHead className="w-[80px]">
@@ -452,7 +452,10 @@ export default function HistorialPage() {
             </CardContent>
 
             {filteredDiagnosticos.length > 0 && (
-              <CardFooter className="flex items-center justify-between border-t border-gray-100 px-6 py-4 bg-gray-50">
+              <CardFooter
+                className="flex items-center justify-between border-t border-gray-100 px-6 py-4 bg-gray-50"
+                style={{ width: "100%", maxWidth: "100%" }}
+              >
                 <div className="text-sm text-gray-500">
                   Mostrando {(currentPage - 1) * itemsPerPage + 1} a{" "}
                   {Math.min(currentPage * itemsPerPage, filteredDiagnosticos.length)} de {filteredDiagnosticos.length}{" "}
@@ -489,3 +492,4 @@ export default function HistorialPage() {
     </div>
   )
 }
+

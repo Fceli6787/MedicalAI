@@ -1,269 +1,356 @@
--- Crear base de datos
-CREATE DATABASE SOFIAMedicalAI;
-USE DATABASE SOFIAMedicalAI;
+-- Base de datos: `sofiamedicalai`
 
--- Tabla: TiposDocumento
-CREATE TABLE TiposDocumento (
-    id_tipo_documento INT PRIMARY KEY AUTO_INCREMENT,
-    codigo VARCHAR(10) NOT NULL UNIQUE,
-    descripcion VARCHAR(50) NOT NULL,
-    estado BOOLEAN DEFAULT TRUE
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `areasinteres`
+
+CREATE TABLE `areasinteres` (
+  `id_area` INTEGER NOT NULL,
+  `nombre` TEXT NOT NULL,
+  `descripcion` TEXT DEFAULT NULL,
+  PRIMARY KEY (`id_area`)
 );
 
--- Tabla: Roles
-CREATE TABLE Roles (
-    id_rol INT PRIMARY KEY AUTO_INCREMENT,
-    nombre VARCHAR(50) NOT NULL UNIQUE,
-    descripcion VARCHAR(255),
-    estado BOOLEAN DEFAULT TRUE
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `areasinteresidentificadas`
+
+CREATE TABLE `areasinteresidentificadas` (
+  `id_imagen` INTEGER NOT NULL,
+  `id_area` INTEGER NOT NULL,
+  `coordenadas` TEXT DEFAULT NULL CHECK (json_valid(`coordenadas`)),
+  `descripcion` TEXT DEFAULT NULL,
+  PRIMARY KEY (`id_imagen`, `id_area`),
+  FOREIGN KEY (`id_imagen`) REFERENCES `imagenesmedicas` (`id_imagen`),
+  FOREIGN KEY (`id_area`) REFERENCES `areasinteres` (`id_area`)
 );
 
--- Tabla: Especialidades
-CREATE TABLE Especialidades (
-    id_especialidad INT PRIMARY KEY AUTO_INCREMENT,
-    nombre VARCHAR(100) NOT NULL UNIQUE,
-    descripcion VARCHAR(255),
-    estado BOOLEAN DEFAULT TRUE
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `diagnosticos`
+
+CREATE TABLE `diagnosticos` (
+  `id_diagnostico` INTEGER NOT NULL,
+  `id_paciente` INTEGER NOT NULL,
+  `id_medico` INTEGER NOT NULL,
+  `id_tipo_examen` INTEGER NOT NULL,
+  `resultado` TEXT NOT NULL,
+  `nivel_confianza` REAL NOT NULL,
+  `fecha_diagnostico` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `estado` TEXT DEFAULT 'Pendiente' CHECK (`estado` IN ('Pendiente', 'Completado', 'Anulado')),
+  PRIMARY KEY (`id_diagnostico`),
+  FOREIGN KEY (`id_paciente`) REFERENCES `pacientes` (`id_usuario`),
+  FOREIGN KEY (`id_medico`) REFERENCES `medicos` (`id_usuario`),
+  FOREIGN KEY (`id_tipo_examen`) REFERENCES `tiposexamen` (`id_tipo_examen`)
 );
 
--- Tabla: Paises
-CREATE TABLE Paises (
-    id_pais INT PRIMARY KEY AUTO_INCREMENT,
-    codigo VARCHAR(3) NOT NULL UNIQUE,
-    nombre VARCHAR(100) NOT NULL,
-    estado BOOLEAN DEFAULT TRUE
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `especialidades`
+
+CREATE TABLE `especialidades` (
+  `id_especialidad` INTEGER NOT NULL,
+  `nombre` TEXT NOT NULL,
+  `descripcion` TEXT DEFAULT NULL,
+  `estado` INTEGER DEFAULT 1,
+  PRIMARY KEY (`id_especialidad`),
+  UNIQUE (`nombre`)
 );
 
--- Tabla: Usuarios
-CREATE TABLE Usuarios (
-    id_usuario INT PRIMARY KEY AUTO_INCREMENT,
-    id_tipo_documento INT NOT NULL,
-    id_pais INT NOT NULL,
-    nui VARCHAR(20) NOT NULL,
-    primer_nombre VARCHAR(50) NOT NULL,
-    segundo_nombre VARCHAR(50),
-    primer_apellido VARCHAR(50) NOT NULL,
-    segundo_apellido VARCHAR(50),
-    correo VARCHAR(255) NOT NULL UNIQUE,
-    firebase_uid VARCHAR(255) NULL,
-    fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
-    ultima_actividad DATETIME,
-    estado ENUM('Activo', 'Inactivo', 'Bloqueado') DEFAULT 'Activo',
-    FOREIGN KEY (id_tipo_documento) REFERENCES TiposDocumento(id_tipo_documento),
-    FOREIGN KEY (id_pais) REFERENCES Paises(id_pais)
+-- Volcado de datos para la tabla `especialidades`
+
+INSERT INTO `especialidades` (`id_especialidad`, `nombre`, `descripcion`, `estado`) VALUES
+(1, 'Radiología', 'Especialista en diagnóstico por imágenes', 1),
+(2, 'Neurología', 'Especialista en sistema nervioso', 1),
+(3, 'Cardiología', 'Especialista en sistema cardiovascular', 1);
+
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `historialmedicoespecialidades`
+
+CREATE TABLE `historialmedicoespecialidades` (
+  `id_medico` INTEGER NOT NULL,
+  `id_especialidad` INTEGER NOT NULL,
+  `fecha_inicio` DATE NOT NULL,
+  `fecha_fin` DATE DEFAULT NULL,
+  `certificado_url` TEXT DEFAULT NULL,
+  PRIMARY KEY (`id_medico`, `id_especialidad`, `fecha_inicio`),
+  FOREIGN KEY (`id_medico`) REFERENCES `medicos` (`id_usuario`),
+  FOREIGN KEY (`id_especialidad`) REFERENCES `especialidades` (`id_especialidad`)
 );
 
--- Tabla: UsuariosRoles
-CREATE TABLE UsuariosRoles (
-    id_usuario INT NOT NULL,
-    id_rol INT NOT NULL,
-    fecha_asignacion DATETIME DEFAULT CURRENT_TIMESTAMP,
-    estado BOOLEAN DEFAULT TRUE,
-    PRIMARY KEY (id_usuario, id_rol),
-    FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario),
-    FOREIGN KEY (id_rol) REFERENCES Roles(id_rol)
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `imagenesmedicas`
+
+CREATE TABLE `imagenesmedicas` (
+  `id_imagen` INTEGER NOT NULL,
+  `id_diagnostico` INTEGER NOT NULL,
+  `tipo` TEXT NOT NULL CHECK (`tipo` IN ('DICOM', 'PNG', 'JPG')),
+  `url` TEXT NOT NULL,
+  `metadata` TEXT DEFAULT NULL CHECK (json_valid(`metadata`)),
+  `fecha_carga` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_imagen`),
+  FOREIGN KEY (`id_diagnostico`) REFERENCES `diagnosticos` (`id_diagnostico`)
 );
 
--- Tabla: SesionesUsuario (Usando TIMESTAMP)
-CREATE TABLE SesionesUsuario (
-    id_sesion VARCHAR(255) PRIMARY KEY,
-    id_usuario INT NOT NULL,
-    ip_address VARCHAR(45),
-    user_agent TEXT,
-    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fecha_expiracion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario)
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `medicos`
+
+CREATE TABLE `medicos` (
+  `id_usuario` INTEGER NOT NULL,
+  `id_especialidad` INTEGER NOT NULL,
+  `numero_tarjeta_profesional` TEXT NOT NULL,
+  `fecha_ingreso` DATE NOT NULL,
+  `años_experiencia` INTEGER DEFAULT NULL,
+  PRIMARY KEY (`id_usuario`),
+  UNIQUE (`numero_tarjeta_profesional`),
+  FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`),
+  FOREIGN KEY (`id_especialidad`) REFERENCES `especialidades` (`id_especialidad`)
 );
 
--- Tabla: Medicos
-CREATE TABLE Medicos (
-    id_usuario INT PRIMARY KEY,
-    id_especialidad INT NOT NULL,
-    numero_tarjeta_profesional VARCHAR(50) NOT NULL UNIQUE,
-    fecha_ingreso DATE NOT NULL,
-    años_experiencia INT,
-    FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario),
-    FOREIGN KEY (id_especialidad) REFERENCES Especialidades(id_especialidad)
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `notificaciones`
+
+CREATE TABLE `notificaciones` (
+  `id_notificacion` INTEGER NOT NULL,
+  `id_tipo_notificacion` INTEGER NOT NULL,
+  `id_usuario` INTEGER NOT NULL,
+  `titulo` TEXT NOT NULL,
+  `mensaje` TEXT NOT NULL,
+  `link` TEXT DEFAULT NULL,
+  `estado` TEXT DEFAULT 'No Leída' CHECK (`estado` IN ('No Leída', 'Leída', 'Archivada')),
+  `fecha_creacion` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `fecha_lectura` DATETIME DEFAULT NULL,
+  PRIMARY KEY (`id_notificacion`),
+  FOREIGN KEY (`id_tipo_notificacion`) REFERENCES `tiposnotificacion` (`id_tipo_notificacion`),
+  FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`)
 );
 
--- Tabla: HistorialMedicoEspecialidades
-CREATE TABLE HistorialMedicoEspecialidades (
-    id_medico INT NOT NULL,
-    id_especialidad INT NOT NULL,
-    fecha_inicio DATE NOT NULL,
-    fecha_fin DATE,
-    certificado_url VARCHAR(512),
-    PRIMARY KEY (id_medico, id_especialidad, fecha_inicio),
-    FOREIGN KEY (id_medico) REFERENCES Medicos(id_usuario),  -- Corregido: Referencia a la clave primaria correcta
-    FOREIGN KEY (id_especialidad) REFERENCES Especialidades(id_especialidad)
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `pacientes`
+
+CREATE TABLE `pacientes` (
+  `id_usuario` INTEGER NOT NULL,
+  `grupo_sanguineo` TEXT DEFAULT NULL,
+  `alergias` TEXT DEFAULT NULL,
+  `antecedentes_medicos` TEXT DEFAULT NULL,
+  `telefono_contacto` TEXT DEFAULT NULL,
+  `direccion_residencial` TEXT DEFAULT NULL,
+  `fecha_nacimiento` DATE DEFAULT NULL,
+  `genero` TEXT DEFAULT NULL,
+  `ocupacion` TEXT DEFAULT NULL,
+  `info_seguro_medico` TEXT DEFAULT NULL,
+  `contacto_emergencia` TEXT DEFAULT NULL,
+  `historial_visitas` TEXT DEFAULT NULL,
+  PRIMARY KEY (`id_usuario`),
+  FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`)
 );
 
--- Tabla: Pacientes
-CREATE TABLE Pacientes (
-    id_usuario INT PRIMARY KEY,
-    grupo_sanguineo VARCHAR(5),
-    alergias TEXT,
-    antecedentes_medicos TEXT,
-    telefono_contacto VARCHAR(20),
-    direccion_residencial TEXT,
-    fecha_nacimiento DATE,
-    genero VARCHAR(20),
-    ocupacion VARCHAR(100),
-    info_seguro_medico TEXT,
-    contacto_emergencia VARCHAR(100),
-    historial_visitas TEXT,
-    FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario)
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `paises`
+
+CREATE TABLE `paises` (
+  `id_pais` INTEGER NOT NULL,
+  `codigo` TEXT NOT NULL,
+  `nombre` TEXT NOT NULL,
+  `estado` INTEGER DEFAULT 1,
+  PRIMARY KEY (`id_pais`),
+  UNIQUE (`codigo`)
 );
 
--- Tabla: TiposExamen
-CREATE TABLE TiposExamen (
-    id_tipo_examen INT PRIMARY KEY AUTO_INCREMENT,
-    nombre VARCHAR(100) NOT NULL,
-    descripcion TEXT,
-    estado BOOLEAN DEFAULT TRUE
+-- Volcado de datos para la tabla `paises`
+
+INSERT INTO `paises` (`id_pais`, `codigo`, `nombre`, `estado`) VALUES
+(1, 'COL', 'Colombia', 1);
+
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `recomendaciones`
+
+CREATE TABLE `recomendaciones` (
+  `id_recomendacion` INTEGER NOT NULL,
+  `id_diagnostico` INTEGER NOT NULL,
+  `descripcion` TEXT NOT NULL,
+  `prioridad` TEXT DEFAULT 'Media' CHECK (`prioridad` IN ('Alta', 'Media', 'Baja')),
+  `fecha_creacion` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_recomendacion`),
+  FOREIGN KEY (`id_diagnostico`) REFERENCES `diagnosticos` (`id_diagnostico`)
 );
 
--- Tabla: Diagnosticos
-CREATE TABLE Diagnosticos (
-    id_diagnostico INT PRIMARY KEY AUTO_INCREMENT,
-    id_paciente INT NOT NULL,
-    id_medico INT NOT NULL,
-    id_tipo_examen INT NOT NULL,
-    resultado TEXT NOT NULL,
-    nivel_confianza DECIMAL(5, 2) NOT NULL,
-    fecha_diagnostico DATETIME DEFAULT CURRENT_TIMESTAMP,
-    estado ENUM('Pendiente', 'Completado', 'Anulado') DEFAULT 'Pendiente',
-    FOREIGN KEY (id_paciente) REFERENCES Pacientes(id_usuario),
-    FOREIGN KEY (id_medico) REFERENCES Medicos(id_usuario),
-    FOREIGN KEY (id_tipo_examen) REFERENCES TiposExamen(id_tipo_examen)
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `resetcodes`
+
+CREATE TABLE `resetcodes` (
+  `id_reset` INTEGER NOT NULL,
+  `id_usuario` INTEGER NOT NULL,
+  `codigo` TEXT NOT NULL,
+  `fecha_expiracion` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `estado` TEXT DEFAULT 'Activo' CHECK (`estado` IN ('Activo', 'Usado', 'Expirado')),
+  PRIMARY KEY (`id_reset`),
+  FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`)
 );
 
--- Tabla: AreasInteres
-CREATE TABLE AreasInteres (
-    id_area INT PRIMARY KEY AUTO_INCREMENT,
-    nombre VARCHAR(100) NOT NULL,
-    descripcion TEXT
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `roles`
+
+CREATE TABLE `roles` (
+  `id_rol` INTEGER NOT NULL,
+  `nombre` TEXT NOT NULL,
+  `descripcion` TEXT DEFAULT NULL,
+  `estado` INTEGER DEFAULT 1,
+  PRIMARY KEY (`id_rol`),
+  UNIQUE (`nombre`)
 );
 
--- Tabla: ImagenesMedicas
-CREATE TABLE ImagenesMedicas (
-    id_imagen INT PRIMARY KEY AUTO_INCREMENT,
-    id_diagnostico INT NOT NULL,
-    tipo ENUM('DICOM', 'PNG', 'JPG') NOT NULL,
-    url VARCHAR(512) NOT NULL,
-    metadata JSON,
-    fecha_carga DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_diagnostico) REFERENCES Diagnosticos(id_diagnostico)
+-- Volcado de datos para la tabla `roles`
+
+INSERT INTO `roles` (`id_rol`, `nombre`, `descripcion`, `estado`) VALUES
+(1, 'admin', 'Administrador del sistema', 1),
+(2, 'medico', 'Médico que realiza diagnósticos', 1),
+(3, 'paciente', 'Paciente que recibe diagnósticos', 1);
+
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `seguimientorecomendaciones`
+
+CREATE TABLE `seguimientorecomendaciones` (
+  `id_seguimiento` INTEGER NOT NULL,
+  `id_recomendacion` INTEGER NOT NULL,
+  `estado` TEXT DEFAULT 'Pendiente' CHECK (`estado` IN ('Pendiente', 'En Progreso', 'Completada', 'Cancelada')),
+  `notas` TEXT DEFAULT NULL,
+  `fecha_actualizacion` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_seguimiento`),
+  FOREIGN KEY (`id_recomendacion`) REFERENCES `recomendaciones` (`id_recomendacion`)
 );
 
--- Tabla: AreasInteresIdentificadas
-CREATE TABLE AreasInteresIdentificadas (
-    id_imagen INT NOT NULL,
-    id_area INT NOT NULL,
-    coordenadas JSON,
-    descripcion TEXT,
-    PRIMARY KEY (id_imagen, id_area),
-    FOREIGN KEY (id_imagen) REFERENCES ImagenesMedicas(id_imagen),
-    FOREIGN KEY (id_area) REFERENCES AreasInteres(id_area)
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `sesionesusuario`
+
+CREATE TABLE `sesionesusuario` (
+  `id_sesion` TEXT NOT NULL,
+  `id_usuario` INTEGER NOT NULL,
+  `ip_address` TEXT DEFAULT NULL,
+  `user_agent` TEXT DEFAULT NULL,
+  `fecha_creacion` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `fecha_expiracion` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_sesion`),
+  FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`)
 );
 
--- Tabla: Recomendaciones
-CREATE TABLE Recomendaciones (
-    id_recomendacion INT PRIMARY KEY AUTO_INCREMENT,
-    id_diagnostico INT NOT NULL,
-    descripcion TEXT NOT NULL,
-    prioridad ENUM('Alta', 'Media', 'Baja') DEFAULT 'Media',
-    fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_diagnostico) REFERENCES Diagnosticos(id_diagnostico)
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `tiposdocumento`
+
+CREATE TABLE `tiposdocumento` (
+  `id_tipo_documento` INTEGER NOT NULL,
+  `codigo` TEXT NOT NULL,
+  `descripcion` TEXT NOT NULL,
+  `estado` INTEGER DEFAULT 1,
+  PRIMARY KEY (`id_tipo_documento`),
+  UNIQUE (`codigo`)
 );
 
--- Tabla: SeguimientoRecomendaciones
-CREATE TABLE SeguimientoRecomendaciones (
-    id_seguimiento INT PRIMARY KEY AUTO_INCREMENT,
-    id_recomendacion INT NOT NULL,
-    estado ENUM('Pendiente', 'En Progreso', 'Completada', 'Cancelada') DEFAULT 'Pendiente',
-    notas TEXT,
-    fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_recomendacion) REFERENCES Recomendaciones(id_recomendacion)
+-- Volcado de datos para la tabla `tiposdocumento`
+
+INSERT INTO `tiposdocumento` (`id_tipo_documento`, `codigo`, `descripcion`, `estado`) VALUES
+(1, 'CC', 'Cédula de Ciudadanía', 1),
+(2, 'CE', 'Cédula de Extranjería', 1),
+(3, 'PS', 'Pasaporte', 1);
+
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `tiposexamen`
+
+CREATE TABLE `tiposexamen` (
+  `id_tipo_examen` INTEGER NOT NULL,
+  `nombre` TEXT NOT NULL,
+  `descripcion` TEXT DEFAULT NULL,
+  `estado` INTEGER DEFAULT 1,
+  PRIMARY KEY (`id_tipo_examen`)
 );
 
--- Tabla: TiposNotificacion
-CREATE TABLE TiposNotificacion (
-    id_tipo_notificacion INT PRIMARY KEY AUTO_INCREMENT,
-    nombre VARCHAR(100) NOT NULL,
-    plantilla TEXT NOT NULL,
-    icono VARCHAR(50),
-    color VARCHAR(20),
-    estado BOOLEAN DEFAULT TRUE,
-    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- Volcado de datos para la tabla `tiposexamen`
+
+INSERT INTO `tiposexamen` (`id_tipo_examen`, `nombre`, `descripcion`, `estado`) VALUES
+(1, 'Radiografía', 'Imagen por rayos X', 1),
+(2, 'Resonancia Magnética', 'Imagen por resonancia magnética nuclear', 1),
+(3, 'Tomografía', 'Tomografía computarizada', 1);
+
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `tiposnotificacion`
+
+CREATE TABLE `tiposnotificacion` (
+  `id_tipo_notificacion` INTEGER NOT NULL,
+  `nombre` TEXT NOT NULL,
+  `plantilla` TEXT NOT NULL,
+  `icono` TEXT DEFAULT NULL,
+  `color` TEXT DEFAULT NULL,
+  `estado` INTEGER DEFAULT 1,
+  `fecha_creacion` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_tipo_notificacion`)
 );
 
--- Tabla: Notificaciones
-CREATE TABLE Notificaciones (
-    id_notificacion INT PRIMARY KEY AUTO_INCREMENT,
-    id_tipo_notificacion INT NOT NULL,
-    id_usuario INT NOT NULL,
-    titulo VARCHAR(255) NOT NULL,
-    mensaje TEXT NOT NULL,
-    link VARCHAR(255),
-    estado ENUM('No Leída', 'Leída', 'Archivada') DEFAULT 'No Leída',
-    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fecha_lectura TIMESTAMP NULL,
-    FOREIGN KEY (id_tipo_notificacion) REFERENCES TiposNotificacion(id_tipo_notificacion),
-    FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario)
+-- Volcado de datos para la tabla `tiposnotificacion`
+
+INSERT INTO `tiposnotificacion` (`id_tipo_notificacion`, `nombre`, `plantilla`, `icono`, `color`, `estado`, `fecha_creacion`) VALUES
+(1, 'DiagnosticoCompletado', 'El diagnóstico para {paciente} ha sido completado. Haga clic para ver los resultados.', 'check-circle', '#059669', 1, '2025-04-29 19:30:57'),
+(2, 'ResultadosDisponibles', 'Los resultados del análisis de {paciente} están disponibles para revisión.', 'clipboard-list', '#2563eb', 1, '2025-04-29 19:30:57'),
+(3, 'RecordatorioCita', 'Recordatorio: Tiene una cita programada con {paciente} para {fecha}.', 'calendar', '#d97706', 1, '2025-04-29 19:30:57'),
+(4, 'ActualizacionSistema', 'Se ha realizado una actualización importante en el sistema: {mensaje}', 'info-circle', '#6366f1', 1, '2025-04-29 19:30:57');
+
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `usuarios`
+
+CREATE TABLE `usuarios` (
+  `id_usuario` INTEGER NOT NULL,
+  `id_tipo_documento` INTEGER NOT NULL,
+  `id_pais` INTEGER NOT NULL,
+  `nui` TEXT NOT NULL,
+  `primer_nombre` TEXT NOT NULL,
+  `segundo_nombre` TEXT DEFAULT NULL,
+  `primer_apellido` TEXT NOT NULL,
+  `segundo_apellido` TEXT DEFAULT NULL,
+  `correo` TEXT NOT NULL,
+  `firebase_uid` TEXT DEFAULT NULL,
+  `fecha_registro` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `ultima_actividad` DATETIME DEFAULT NULL,
+  `estado` TEXT DEFAULT 'Activo' CHECK (`estado` IN ('Activo', 'Inactivo', 'Bloqueado')),
+  PRIMARY KEY (`id_usuario`),
+  UNIQUE (`correo`),
+  FOREIGN KEY (`id_tipo_documento`) REFERENCES `tiposdocumento` (`id_tipo_documento`),
+  FOREIGN KEY (`id_pais`) REFERENCES `paises` (`id_pais`)
 );
 
--- Índices para optimizar consultas
-CREATE INDEX idx_notificaciones_usuario_estado ON Notificaciones(id_usuario, estado);
-CREATE INDEX idx_notificaciones_fecha ON Notificaciones(fecha_creacion);
-CREATE INDEX idx_sesiones_usuario ON SesionesUsuario(id_usuario);
-CREATE INDEX idx_sesiones_expiracion ON SesionesUsuario(fecha_expiracion);
+-- Volcado de datos para la tabla `usuarios`
 
--- Tabla: ResetCodes (Agregada para manejar códigos de restablecimiento de contraseña)
-CREATE TABLE ResetCodes (
-    id_reset INT PRIMARY KEY AUTO_INCREMENT,
-    id_usuario INT NOT NULL,
-    codigo VARCHAR(255) NOT NULL,
-    fecha_expiracion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    estado ENUM('Activo', 'Usado', 'Expirado') DEFAULT 'Activo',
-    FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario)
+INSERT INTO `usuarios` (`id_usuario`, `id_tipo_documento`, `id_pais`, `nui`, `primer_nombre`, `segundo_nombre`, `primer_apellido`, `segundo_apellido`, `correo`, `firebase_uid`, `fecha_registro`, `ultima_actividad`, `estado`) VALUES
+(1, 1, 1, '123456', 'Juan', NULL, 'Rodriguez', NULL, 'maria.rodriguez@sofiamedical.com', 'b7r3RDUaW3XTFCLwKT8odLPz3KB2', '2025-04-29 14:35:44', NULL, 'Activo');
+
+-- --------------------------------------------------------
+
+-- Estructura de tabla para la tabla `usuariosroles`
+
+CREATE TABLE `usuariosroles` (
+  `id_usuario` INTEGER NOT NULL,
+  `id_rol` INTEGER NOT NULL,
+  `fecha_asignacion` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `estado` INTEGER DEFAULT 1,
+  PRIMARY KEY (`id_usuario`, `id_rol`),
+  FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`),
+  FOREIGN KEY (`id_rol`) REFERENCES `roles` (`id_rol`)
 );
 
--- Índices para ResetCodes después de crear la tabla
-CREATE INDEX idx_reset_codigo ON ResetCodes(codigo);
-CREATE INDEX idx_reset_usuario ON ResetCodes(id_usuario);
+-- Volcado de datos para la tabla `usuariosroles`
 
--- Insertar roles básicos
-INSERT INTO Roles (nombre, descripcion) VALUES
-('admin', 'Administrador del sistema'),
-('medico', 'Médico que realiza diagnósticos'),
-('paciente', 'Paciente que recibe diagnósticos');
-
--- Insertar tipos de documento comunes
-INSERT INTO TiposDocumento (codigo, descripcion) VALUES
-('CC', 'Cédula de Ciudadanía'),
-('CE', 'Cédula de Extranjería'),
-('PS', 'Pasaporte');
-
--- Insertar algunos países
-INSERT INTO Paises (codigo, nombre) VALUES
-('COL', 'Colombia');
-
--- Insertar especialidades médicas comunes
-INSERT INTO Especialidades (nombre, descripcion) VALUES
-('Radiología', 'Especialista en diagnóstico por imágenes'),
-('Neurología', 'Especialista en sistema nervioso'),
-('Cardiología', 'Especialista en sistema cardiovascular');
-
--- Insertar tipos de examen
-INSERT INTO TiposExamen (nombre, descripcion) VALUES
-('Radiografía', 'Imagen por rayos X'),
-('Resonancia Magnética', 'Imagen por resonancia magnética nuclear'),
-('Tomografía', 'Tomografía computarizada');
-
--- Insertar tipos de notificación básicos
-INSERT INTO TiposNotificacion (nombre, plantilla, icono, color) VALUES
-('DiagnosticoCompletado', 'El diagnóstico para {paciente} ha sido completado. Haga clic para ver los resultados.', 'check-circle', '#059669'),
-('ResultadosDisponibles', 'Los resultados del análisis de {paciente} están disponibles para revisión.', 'clipboard-list', '#2563eb'),
-('RecordatorioCita', 'Recordatorio: Tiene una cita programada con {paciente} para {fecha}.', 'calendar', '#d97706'),
-('ActualizacionSistema', 'Se ha realizado una actualización importante en el sistema: {mensaje}', 'info-circle', '#6366f1');
+INSERT INTO `usuariosroles` (`id_usuario`, `id_rol`, `fecha_asignacion`, `estado`) VALUES
+(1, 2, '2025-04-29 14:35:44', 1);

@@ -30,14 +30,14 @@ interface AuthContextProps {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (userData: {
-    id_tipo_documento: number;
-    id_pais: number;
+    tipoDocumentoCodigo: string; // Cambiado a código
+    paisCodigo: string; // Cambiado a código
     nui: string;
     primer_nombre: string;
     segundo_nombre?: string | null;
     primer_apellido: string;
     segundo_apellido?: string | null;
-    email: string; // Cambiado de 'correo' a 'email'
+    email: string;
     password: string;
     id_especialidad: number;
     numero_tarjeta_profesional: string;
@@ -57,31 +57,38 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState<boolean>(true); // Inicialmente true mientras se verifica la autenticación
   const router = useRouter();
   const auth = getAuth(app);
-  
+
   // Configurar persistencia solo si no está ya configurada
   useEffect(() => {
     const configurePersistence = async () => {
       try {
         await setPersistence(auth, browserLocalPersistence);
+        console.log("Firebase persistence configured.");
       } catch (error) {
         console.error("Error configuring persistence:", error);
       }
     };
-    
+
     configurePersistence();
   }, [auth]);
 
   // Listener para el estado de autenticación de Firebase
   useEffect(() => {
+    console.log("Setting up Firebase auth state listener.");
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      console.log("Firebase auth state changed. firebaseUser:", firebaseUser ? firebaseUser.uid : null);
       if (firebaseUser) {
         // Si hay un usuario autenticado en Firebase, obtener sus datos de la API
         try {
+          console.log("Fetching user data from API for firebase_uid:", firebaseUser.uid);
           const response = await fetch(`/api/dashboard/users?firebase_uid=${firebaseUser.uid}`);
           const data = await response.json();
+          console.log("API response for user data:", data);
           if (response.ok && data.user) {
+            console.log("User data fetched successfully:", data.user);
             setUser(data.user);
           } else {
+            console.warn("User data not found in API or API error. Signing out Firebase.");
             // Si no se encuentran datos del usuario en la API, cerrar sesión en Firebase
             await signOut(auth);
             setUser(null);
@@ -92,13 +99,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setUser(null);
         }
       } else {
+        console.log("No Firebase user found. Setting AuthContext user to null.");
         setUser(null);
       }
+      console.log("AuthContext loading set to false.");
       setLoading(false); // La verificación inicial ha terminado
     });
 
     // Limpiar el listener al desmontar el componente
-    return () => unsubscribe();
+    return () => {
+      console.log("Cleaning up Firebase auth state listener.");
+      unsubscribe();
+    };
   }, [auth]); // Dependencia en 'auth'
 
   const handleLogin = async (email: string, password: string) => {
@@ -110,7 +122,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         body: JSON.stringify({ email, password }),
       });
       const result = await response.json(); // Cambiado de data a result para mayor claridad
-      
+
       if (!response.ok) {
         // Si la respuesta no es OK, mostrar el mensaje de error de la API con SweetAlert2
         Swal.fire({
@@ -119,7 +131,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           text: result.error || 'Login failed',
         });
         // No relanzar el error aquí para evitar que el catch genérico lo maneje también
-        return; 
+        return;
       }
 
       // Si la respuesta es OK, proceder con el inicio de sesión exitoso
@@ -152,7 +164,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       await signOut(auth);
       setUser(null);
-      router.push("/");
+      router.push("/login");
     } catch (error) {
       console.error("Error logging out:", error);
       toast.error("Something went wrong when logging out");
@@ -161,14 +173,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const handleRegister = async (
     userData: {
-      id_tipo_documento: number;
-      id_pais: number;
+      tipoDocumentoCodigo: string; // Cambiado a código
+      paisCodigo: string; // Cambiado a código
       nui: string;
       primer_nombre: string;
       segundo_nombre?: string | null;
       primer_apellido: string;
       segundo_apellido?: string | null;
-      email: string; // Cambiado de 'correo' a 'email'
+      email: string;
       password: string;
       id_especialidad: number;
       numero_tarjeta_profesional: string;

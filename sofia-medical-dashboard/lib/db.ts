@@ -1,120 +1,121 @@
-import mysql from 'mysql2/promise';
+import { Database } from '@sqlitecloud/drivers';
 
-let pool: mysql.Pool | null = null;
+let client: Database | null = null;
 
-const getPool = async (): Promise<mysql.Pool> => {
-  if (pool) return pool;
-
-  const dbConfig = {
-    host: process.env.MYSQL_HOST,
-    user: process.env.MYSQL_USER,
-    password: process.env.MYSQL_PASSWORD,
-    database: process.env.MYSQL_DATABASE,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-  };
-
-  // Verificar que las variables de entorno necesarias estén definidas
-  if (!dbConfig.host || !dbConfig.user || !dbConfig.database) {
-      throw new Error('Missing one or more MySQL environment variables (MYSQL_HOST, MYSQL_USER, MYSQL_DATABASE)');
+const getClient = async (): Promise<Database> => {
+  if (client) {
+    return client;
   }
 
+  const dbUrl = process.env.NEXT_PUBLIC_SQLITECLOUD_URL;
 
-  pool = mysql.createPool(dbConfig as mysql.PoolOptions);
+  if (!dbUrl) {
+    throw new Error('Missing SQLITECLOUD_URL environment variable');
+  }
 
-  return pool;
+  try {
+    client = new Database(dbUrl);
+    console.log('SQLite Cloud client connected');
+    return client;
+  } catch (error) {
+    console.error('Error connecting to SQLite Cloud:', error);
+    throw error;
+  }
 };
 
 export async function getConnection() {
-    if (!pool) {
-        const dbConfig = {
-            host: process.env.MYSQL_HOST,
-            user: process.env.MYSQL_USER,
-            password: process.env.MYSQL_PASSWORD,
-            database: process.env.MYSQL_DATABASE,
-            waitForConnections: true,
-            connectionLimit: 10,
-            queueLimit: 0
-        };
-
-        if (!dbConfig.host || !dbConfig.user || !dbConfig.database) {
-            throw new Error('Missing one or more MySQL environment variables (MYSQL_HOST, MYSQL_USER, MYSQL_DATABASE)');
-        }
-
-        pool = mysql.createPool(dbConfig as mysql.PoolOptions);
-    }
-    return pool;
+  // En SQLite Cloud, no usamos un pool de conexiones de la misma manera que con MySQL.
+  // El cliente maneja la conexión. Esta función simplemente devolverá el cliente conectado.
+  return getClient();
 }
 
 export async function init() {
+  if (typeof window !== 'undefined') {
+    return;
+  }
+  try {
+    const dbClient = await getClient();
+    console.log('Database connected');
+
+    // Verificar si las tablas existen (puedes verificar una tabla, como 'roles')
+    // En SQLite, la forma de verificar la existencia de una tabla es diferente.
+    // Podemos consultar la tabla sqlite_master.
+    const tablesExistResult = await dbClient.sql(`SELECT name FROM sqlite_master WHERE type='table' AND name='roles'`);
+    // Asumiendo que .rows es la propiedad correcta según el driver @sqlitecloud/drivers
+    const tablesExist = tablesExistResult && tablesExistResult.length > 0;
 
 
-    if (typeof window !== 'undefined') {
+    if (!tablesExist) {
+      console.error('Tables do not exist, attempting to initialize...');
+      // Aquí deberías tener la lógica para crear las tablas si no existen.
+      // Como el usuario mencionó que eliminó el db.ts anterior, asumo que la inicialización
+      // de la base de datos (creación de tablas, etc.) se maneja externamente o en otro lugar.
+      // Si necesitas que la lógica de creación de tablas esté aquí, por favor indícalo.
+      console.log('Database initialization logic adjusted. Ensure database is initialized externally.');
+    } else {
+      console.log('Tables exist');
+      // Verificar y crear roles si no existen
+      const rolesToEnsure = ['admin', 'medico', 'paciente'];
+      for (const roleName of rolesToEnsure) {
+        const roleRows = await dbClient.sql(`SELECT id_rol FROM roles WHERE nombre = ?`, [roleName]);
+        // Asumiendo que .rows es la propiedad correcta
+        if (roleRows && roleRows.length === 0) {
+          await dbClient.sql(`INSERT INTO roles (nombre) VALUES (?)`, [roleName]);
+          console.log(`Rol '${roleName}' creado.`);
+        }
+      }
 
-        return;
-    }
+      const adminEmail = 'admin@example.com';
+      const adminUid = 'ADMIN';
+      const adminRole = 'admin';
 
-    try {
+      // Check if admin user exists
+      const adminUserRows = await dbClient.sql(`SELECT id_usuario FROM usuarios WHERE correo = ?`, [adminEmail]);
+      // Asumiendo que .rows es la propiedad correcta
+      if (adminUserRows && adminUserRows.length === 0) {
+        // Insert admin user
+        // Nota: Las subconsultas en INSERT VALUES pueden no ser soportadas directamente en SQLite de la misma manera que en MySQL.
+        // Adaptaremos esto para obtener los IDs primero.
+        const tipoDocumentoResult = await dbClient.sql(`SELECT id_tipo_documento FROM tiposdocumento WHERE codigo = 'CC'`);
+        const idTipoDocumento = tipoDocumentoResult?.[0]?.id_tipo_documento;
 
-        const pool = await getPool();
-        const connection = await pool.getConnection();
-        console.log('Database connected');
-        // Check if tables exist (you can check for one table, like 'Roles')
-        await connection.query('SELECT 1 FROM Roles');
-        console.log('Tables exist');
-        connection.release();
-    } catch (error) {
-        console.error('Tables do not exist, creating them:', error);
+        const paisResult = await dbClient.sql(`SELECT id_pais FROM paises WHERE codigo = 'COL'`);
+        const idPais = paisResult?.[0]?.id_pais;
 
-       const pool = await getPool();
-        const connection = await pool.getConnection();
 
-        try {
-            // Verificar y crear roles si no existen
-            const rolesToEnsure = ['admin', 'medico', 'paciente']; // Asegurar que 'medico' y 'paciente' se crean
-            for (const roleName of rolesToEnsure) {
-                const [roleRows] = await connection.query(
-                    'SELECT id_rol FROM Roles WHERE nombre = ?',
-                    [roleName]
-                );
-                if ((roleRows as any[]).length === 0) {
-                    await connection.query('INSERT INTO Roles (nombre) VALUES (?)', [roleName]);
-                    console.log(`Rol '${roleName}' creado.`);
-                }
-            }
-
-            const adminEmail = 'admin@example.com';
-            const adminUid = 'ADMIN';
-            const adminRole = 'admin';
-
-            // Check if admin user exists
-            const [adminUserRows] = await connection.query(
-                'SELECT id_usuario FROM Usuarios WHERE correo = ?',
-                [adminEmail]
+        if (!idTipoDocumento || !idPais) {
+           console.error('Could not find default tiposdocumento or paises for admin user creation.');
+           // Dependiendo de si estos campos son NOT NULL, podrías necesitar lanzar un error o manejarlo de otra manera.
+           // Por ahora, solo logueamos un error y no creamos el admin si faltan.
+        } else {
+            // Usamos RETURNING para obtener el id del nuevo usuario, si SQLite Cloud y el driver lo soportan
+            const insertResult = await dbClient.sql(
+              `INSERT INTO usuarios (id_tipo_documento, id_pais, nui, primer_nombre, primer_apellido, correo, firebase_uid, estado) VALUES (?, ?, ?, ?, ?, ?, ?, 'Activo') RETURNING id_usuario`,
+              [idTipoDocumento, idPais, '1234567890', 'Admin', 'Admin', adminEmail, adminUid]
             );
 
-            if ((adminUserRows as any[]).length === 0) {
-                // Insert admin user
-                await connection.query(
-                    'INSERT INTO Usuarios (id_tipo_documento, id_pais, nui, primer_nombre, primer_apellido, correo, firebase_uid, estado) VALUES ((SELECT id_tipo_documento FROM TiposDocumento WHERE codigo = \'CC\'), (SELECT id_pais FROM Paises WHERE codigo = \'COL\'), \'1234567890\', \'Admin\', \'Admin\', ?, ?, \'Activo\')',
-                    [adminEmail, adminUid]
-                );
-                const [newAdminUser] = await connection.query('SELECT id_usuario FROM Usuarios WHERE correo = ?', [adminEmail]);
-                const adminUserId = (newAdminUser as any)[0].id_usuario;
-                await connection.query('INSERT INTO UsuariosRoles (id_usuario, id_rol) VALUES (?, (SELECT id_rol FROM Roles WHERE nombre = ?))', [adminUserId, adminRole]);
-           }
-            // Eliminada la importación y ejecución de database.sql según la retroalimentación del usuario.
-            console.log('Database initialization logic adjusted. Ensure database is initialized via shell.');
-        } catch (error) {
-            console.error('Error during database initialization check:', error);
-            throw error; // Relanzar el error para que sea visible
-        } finally {
-            connection.release();
+            const adminUserId = insertResult?.[0]?.id_usuario;
+
+            if (adminUserId) {
+                // Usar subconsulta para obtener id_rol
+                await dbClient.sql(`INSERT INTO usuariosroles (id_usuario, id_rol) VALUES (?, (SELECT id_rol FROM roles WHERE nombre = ?))`, [adminUserId, adminRole]);
+                console.log('Admin user and role assignment created.');
+            } else {
+                console.error('Failed to retrieve new admin user ID after insertion.');
+                // Considerar si se debe hacer ROLLBACK si se está en una transacción
+            }
         }
+      } else {
+         console.log('Admin user already exists.');
+      }
     }
 
+  } catch (error) {
+    console.error('Error during database initialization check:', error);
+    throw error; // Relanzar el error para que sea visible
+  }
 }
+
 
 /**
  * Retrieves all users from the database.
@@ -122,11 +123,10 @@ export async function init() {
  */
 export const getUsers = async (): Promise<any[]> => {
   try {
-       const pool = await getConnection();
-       const connection = await pool.getConnection();
-    const [rows] = await connection.query('SELECT * FROM Usuarios');
-    connection.release();
-    return rows as any[];
+    const dbClient = await getConnection();
+    const result = await dbClient.sql('SELECT * FROM usuarios');
+    // Asumiendo que el resultado es directamente el array de filas
+    return result || [];
   } catch (error) {
     console.error('Error getting users:', error);
     return [];
@@ -135,13 +135,13 @@ export const getUsers = async (): Promise<any[]> => {
 
 /**
  * Registers a new medical user in the database.
- * Inserts data into Usuarios, UsuariosRoles (with 'medico' role), and Medicos tables.
+ * Inserts data into usuarios, usuariosroles (with 'medico' role), and medicos tables.
  * @param userData The user and medical data.
  * @returns The ID of the newly created user.
  */
 export const registerMedico = async (userData: {
-  id_tipo_documento: number;
-  id_pais: number;
+  tipoDocumentoCodigo: string; // Cambiado de id_tipo_documento: number
+  paisCodigo: string; // Cambiado de id_pais: number
   nui: string;
   primer_nombre: string;
   segundo_nombre?: string | null;
@@ -149,22 +149,35 @@ export const registerMedico = async (userData: {
   segundo_apellido?: string | null;
   correo: string;
   firebase_uid: string;
-  id_especialidad: number;
+  id_especialidad: number; // Se mantiene como ID, asumiendo que la especialidad se selecciona por ID
   numero_tarjeta_profesional: string;
   años_experiencia?: number | null;
 }): Promise<number> => {
-  let connection;
+  let dbClient: Database | undefined;
   try {
-    const pool = await getConnection();
-    connection = await pool.getConnection();
-    await connection.beginTransaction(); // Iniciar transacción
+    dbClient = await getConnection();
 
-    // 1. Insertar en la tabla Usuarios
-    await connection.query(
-      'INSERT INTO Usuarios (id_tipo_documento, id_pais, nui, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, correo, firebase_uid, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'Activo\')',
+    // Obtener id_tipo_documento a partir del código
+    const tipoDocumentoResult = await dbClient.sql(`SELECT id_tipo_documento FROM tiposdocumento WHERE codigo = ?`, [userData.tipoDocumentoCodigo]);
+    const idTipoDocumento = tipoDocumentoResult?.[0]?.id_tipo_documento;
+    if (!idTipoDocumento) {
+      throw new Error(`Tipo de documento con código '${userData.tipoDocumentoCodigo}' no encontrado.`);
+    }
+
+    // Obtener id_pais a partir del código
+    const paisResult = await dbClient.sql(`SELECT id_pais FROM paises WHERE codigo = ?`, [userData.paisCodigo]);
+    const idPais = paisResult?.[0]?.id_pais;
+    if (!idPais) {
+      throw new Error(`País con código '${userData.paisCodigo}' no encontrado.`);
+    }
+
+    // 1. Insertar en la tabla usuarios
+    // Usar RETURNING para obtener el ID, si el driver lo soporta.
+    const insertUserResult = await dbClient.sql(
+      `INSERT INTO usuarios (id_tipo_documento, id_pais, nui, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, correo, firebase_uid, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Activo') RETURNING id_usuario`,
       [
-        userData.id_tipo_documento,
-        userData.id_pais,
+        idTipoDocumento, // Usar el ID obtenido
+        idPais, // Usar el ID obtenido
         userData.nui,
         userData.primer_nombre,
         userData.segundo_nombre || null,
@@ -174,35 +187,25 @@ export const registerMedico = async (userData: {
         userData.firebase_uid,
       ]
     );
-
-    const [newUser] = await connection.query('SELECT id_usuario FROM Usuarios WHERE correo = ?', [userData.correo]);
-    const newUserId = (newUser as any)[0]?.id_usuario;
+    const newUserId = insertUserResult?.[0]?.id_usuario;
 
     if (!newUserId) {
-        await connection.rollback();
-        throw new Error('Failed to retrieve new user ID after insertion.');
+      throw new Error('Failed to retrieve new user ID after insertion.');
     }
 
-    // 2. Asignar el rol 'medico' en UsuariosRoles
-    const [roleRows] = await connection.query(
-      'SELECT id_rol FROM Roles WHERE nombre = ?',
-      ['medico']
-    );
-    const medicoRoleId = (roleRows as any)[0]?.id_rol;
+    // 2. Asignar el rol 'medico' en usuariosroles (Esta parte ya consulta por nombre)
+    const roleRows = await dbClient.sql(`SELECT id_rol FROM roles WHERE nombre = ?`, ['medico']);
+    const medicoRoleId = roleRows?.[0]?.id_rol;
 
     if (!medicoRoleId) {
-        await connection.rollback();
-        throw new Error('Role \'medico\' not found');
+      throw new Error('Role \'medico\' not found');
     }
 
-    await connection.query(
-        'INSERT INTO UsuariosRoles (id_usuario, id_rol) VALUES (?, ?)',
-        [newUserId, medicoRoleId]
-    );
+    await dbClient.sql(`INSERT INTO usuariosroles (id_usuario, id_rol) VALUES (?, ?)`, [newUserId, medicoRoleId]);
 
-    // 3. Insertar en la tabla Medicos
-    await connection.query(
-      'INSERT INTO Medicos (id_usuario, id_especialidad, numero_tarjeta_profesional, fecha_ingreso, años_experiencia) VALUES (?, ?, ?, CURDATE(), ?)', // CURDATE() para fecha_ingreso
+    // 3. Insertar en la tabla medicos (Esta parte aún espera id_especialidad, lo cual parece razonable)
+    await dbClient.sql(
+      `INSERT INTO medicos (id_usuario, id_especialidad, numero_tarjeta_profesional, fecha_ingreso, años_experiencia) VALUES (?, ?, ?, DATE('now'), ?)`, // DATE('now') para fecha_ingreso en SQLite
       [
         newUserId,
         userData.id_especialidad,
@@ -211,16 +214,8 @@ export const registerMedico = async (userData: {
       ]
     );
 
-    await connection.commit(); // Confirmar transacción
-
-    connection.release();
     return newUserId; // Devolver el ID del nuevo usuario
-
   } catch (error) {
-    if (connection) {
-      await connection.rollback(); // Revertir cambios en caso de error
-      connection.release();
-    }
     console.error('Error registering medico:', error);
     throw error;
   }
@@ -234,30 +229,36 @@ export const registerMedico = async (userData: {
  * @returns The ID of the newly created user.
  */
 export const addBasicUser = async (user: {
+  tipoDocumentoCodigo: string; // Agregado
+  paisCodigo: string; // Agregado
   primer_nombre: string;
   primer_apellido: string;
   correo: string;
   firebase_uid: string;
 }): Promise<number> => {
-  let connection;
+  let dbClient: Database | undefined;
   try {
-    const pool = await getConnection();
-    connection = await pool.getConnection();
+    dbClient = await getConnection();
 
-    // Insert basic user info into Usuarios table
-    // Usamos valores por defecto o placeholders para los campos NOT NULL que no se proporcionan inicialmente
-    // Asumiendo que id_tipo_documento y id_pais tienen valores por defecto o se pueden usar IDs de valores predefinidos (ej. 1 para un tipo de documento y país por defecto)
-    // NUI podría ser un string vacío o un valor por defecto si la DB lo permite y no es UNIQUE NOT NULL sin valor por defecto
-    // Si NUI es UNIQUE NOT NULL, necesitaríamos un valor único temporal o reconsiderar el esquema de la DB.
-    // Por ahora, asumiré que podemos usar valores por defecto o que la DB permite inserciones parciales si hay valores por defecto definidos.
-    // Si la DB requiere id_tipo_documento, id_pais, nui como NOT NULL sin valores por defecto, esta inserción fallará.
-    // Basado en database.sql, id_tipo_documento, id_pais, nui son NOT NULL. Necesitamos proporcionar valores.
-    // Usaré IDs 1 para tipo de documento y país por defecto, y un NUI temporal basado en firebase_uid.
-    await connection.query(
-      'INSERT INTO Usuarios (id_tipo_documento, id_pais, nui, primer_nombre, primer_apellido, correo, firebase_uid, estado) VALUES (?, ?, ?, ?, ?, ?, ?, \'Activo\')',
+    // Obtener id_tipo_documento a partir del código
+    const tipoDocumentoResult = await dbClient.sql(`SELECT id_tipo_documento FROM tiposdocumento WHERE codigo = ?`, [user.tipoDocumentoCodigo]);
+    const idTipoDocumento = tipoDocumentoResult?.[0]?.id_tipo_documento;
+    if (!idTipoDocumento) {
+      throw new Error(`Tipo de documento con código '${user.tipoDocumentoCodigo}' no encontrado.`);
+    }
+
+    // Obtener id_pais a partir del código
+    const paisResult = await dbClient.sql(`SELECT id_pais FROM paises WHERE codigo = ?`, [user.paisCodigo]);
+    const idPais = paisResult?.[0]?.id_pais;
+    if (!idPais) {
+      throw new Error(`País con código '${user.paisCodigo}' no encontrado.`);
+    }
+
+    const insertUserResult = await dbClient.sql(
+      `INSERT INTO usuarios (id_tipo_documento, id_pais, nui, primer_nombre, primer_apellido, correo, firebase_uid, estado) VALUES (?, ?, ?, ?, ?, ?, ?, 'Activo') RETURNING id_usuario`,
       [
-        1, // ID por defecto para tipo de documento (ej. 'CC')
-        1, // ID por defecto para país (ej. 'Colombia')
+        idTipoDocumento, // Usar el ID obtenido
+        idPais, // Usar el ID obtenido
         `temp_${user.firebase_uid}`, // NUI temporal único
         user.primer_nombre,
         user.primer_apellido,
@@ -265,32 +266,25 @@ export const addBasicUser = async (user: {
         user.firebase_uid,
       ]
     );
-
-    const [newUser] = await connection.query('SELECT id_usuario FROM Usuarios WHERE correo = ?', [user.correo]);
-    const newUserId = (newUser as any)[0]?.id_usuario;
+    const newUserId = insertUserResult?.[0]?.id_usuario;
 
     if (!newUserId) {
-        throw new Error('Failed to retrieve new user ID after insertion.');
+      throw new Error('Failed to retrieve new user ID after insertion.');
     }
 
-    // Assign default 'paciente' role
-    const [roleRows] = await connection.query(
-      'SELECT id_rol FROM Roles WHERE nombre = ?',
-      ['paciente'] // Asignar rol 'paciente' por defecto
-    );
-    const roleId = (roleRows as any)[0]?.id_rol;
+    // Asignar rol 'paciente' por defecto (Esta parte ya consulta por nombre)
+    const roleRows = await dbClient.sql(`SELECT id_rol FROM roles WHERE nombre = ?`, ['paciente']);
+    const roleId = roleRows?.[0]?.id_rol;
 
     if (!roleId) {
-        throw new Error('Role \'paciente\' not found');
+      throw new Error('Role \'paciente\' not found');
     }
 
-    await connection.query('INSERT INTO UsuariosRoles (id_usuario, id_rol) VALUES (?, ?)', [newUserId, roleId]);
+    await dbClient.sql(`INSERT INTO usuariosroles (id_usuario, id_rol) VALUES (?, ?)`, [newUserId, roleId]);
 
-    connection.release();
     return newUserId; // Devolver el ID del nuevo usuario
   } catch (error) {
     console.error('Error adding basic user:', error);
-    if (connection) connection.release();
     throw error;
   }
 };
@@ -303,8 +297,8 @@ export const addBasicUser = async (user: {
  * @returns void.
  */
 export const addUser = async (user: {
-  id_tipo_documento: number;
-  id_pais: number;
+  tipoDocumentoCodigo: string; // Cambiado de id_tipo_documento: number
+  paisCodigo: string; // Cambiado de id_pais: number
   nui: string;
   primer_nombre: string;
   segundo_nombre?: string | null; // Permitir null explícitamente
@@ -312,51 +306,60 @@ export const addUser = async (user: {
   segundo_apellido?: string | null; // Permitir null explícitamente
   correo: string;
   firebase_uid: string;
-  rol?: string; // Rol es opcional aquí
+  rol?: string; // Rol es opcional aquí (nombre del rol)
 }): Promise<void> => {
-  let connection;
+  let dbClient: Database | undefined;
   try {
-    const pool = await getConnection();
-    connection = await pool.getConnection();
-    await connection.query(
-        'INSERT INTO Usuarios (id_tipo_documento, id_pais, nui, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, correo, firebase_uid, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'Activo\')',
-        [
-          user.id_tipo_documento,
-          user.id_pais,
-          user.nui,
-          user.primer_nombre,
-          user.segundo_nombre,
-          user.primer_apellido,
-          user.segundo_apellido,
-          user.correo,
-          user.firebase_uid,
-        ]
+    dbClient = await getConnection();
+
+    // Obtener id_tipo_documento a partir del código
+    const tipoDocumentoResult = await dbClient.sql(`SELECT id_tipo_documento FROM tiposdocumento WHERE codigo = ?`, [user.tipoDocumentoCodigo]);
+    const idTipoDocumento = tipoDocumentoResult?.[0]?.id_tipo_documento;
+    if (!idTipoDocumento) {
+      throw new Error(`Tipo de documento con código '${user.tipoDocumentoCodigo}' no encontrado.`);
+    }
+
+    // Obtener id_pais a partir del código
+    const paisResult = await dbClient.sql(`SELECT id_pais FROM paises WHERE codigo = ?`, [user.paisCodigo]);
+    const idPais = paisResult?.[0]?.id_pais;
+    if (!idPais) {
+      throw new Error(`País con código '${user.paisCodigo}' no encontrado.`);
+    }
+
+    const insertUserResult = await dbClient.sql(
+      `INSERT INTO usuarios (id_tipo_documento, id_pais, nui, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, correo, firebase_uid, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Activo') RETURNING id_usuario`,
+      [
+        idTipoDocumento, // Usar el ID obtenido
+        idPais, // Usar el ID obtenido
+        user.nui,
+        user.primer_nombre,
+        user.segundo_nombre || null,
+        user.primer_apellido,
+        user.segundo_apellido || null,
+        user.correo,
+        user.firebase_uid,
+      ]
     );
-    const [newUser] = await connection.query('SELECT id_usuario FROM Usuarios WHERE correo = ?', [user.correo]);
-    const newUserId = (newUser as any)[0]?.id_usuario;
+    const newUserId = insertUserResult?.[0]?.id_usuario;
 
     if (!newUserId) {
         throw new Error('Failed to retrieve new user ID after full insertion.');
     }
 
-    // Obtener el id_rol basado en el nombre del rol proporcionado o un valor por defecto si es necesario
-    const roleNameToSearch = user.rol || 'paciente'; // Usar 'paciente' si no se proporciona rol
-    const [roleRows] = await connection.query(
-        'SELECT id_rol FROM Roles WHERE nombre = ?',
-        [roleNameToSearch]
-    );
-    const roleId = (roleRows as any)[0]?.id_rol;
+    // Obtener el id_rol basado en el nombre del rol proporcionado o un valor por defecto si es necesario (Esta parte ya consulta por nombre)
+    const roleNameToSearch = user.rol || 'paciente';
+    const roleRows = await dbClient.sql(`SELECT id_rol FROM roles WHERE nombre = ?`, [roleNameToSearch]);
+    const roleId = roleRows?.[0]?.id_rol;
 
     if (!roleId) {
         throw new Error(`Role '${roleNameToSearch}' not found`);
     }
 
-    // Insertar en UsuariosRoles usando el id_rol
-    await connection.query('INSERT INTO UsuariosRoles (id_usuario, id_rol) VALUES (?, ?)', [newUserId, roleId]);
-    connection.release();
+    // Insertar en usuariosroles usando el id_rol
+    await dbClient.sql(`INSERT INTO usuariosroles (id_usuario, id_rol) VALUES (?, ?)`, [newUserId, roleId]);
+
   } catch (error) {
     console.error('Error adding user (full):', error);
-    if (connection) connection.release();
     throw error;
   }
 };
@@ -368,32 +371,37 @@ export const addUser = async (user: {
  */
 export const getPacientes = async (): Promise<any[]> => {
   try {
-       const pool = await getConnection();
-       const connection = await pool.getConnection();
-    const [rows] = await connection.query(`
+    const dbClient = await getConnection();
+    // Adaptado para usar nombres de tabla en minúsculas y JOIN.
+    const result = await dbClient.sql(`
       SELECT
-          p.id_paciente,
-          u.primer_nombre,
-          u.segundo_nombre,
-          u.primer_apellido,
-          u.segundo_apellido,
-          u.correo,
-          u.fecha_registro,
-          p.grupo_sanguineo,
-          p.alergias,
-          p.antecedentes_medicos,
-          (SELECT COUNT(*) FROM Diagnosticos d WHERE d.id_paciente = p.id_paciente) AS diagnosticosTotales,
-          (SELECT MAX(fecha_diagnostico) FROM Diagnosticos d WHERE d.id_paciente = p.id_paciente) AS ultimo_diagnostico
-      FROM Pacientes p
-      JOIN Usuarios u ON p.id_paciente = u.id_usuario
+        p.id_paciente,
+        u.primer_nombre,
+        u.segundo_nombre,
+        u.primer_apellido,
+        u.segundo_apellido,
+        u.correo,
+        u.fecha_registro,
+        p.grupo_sanguineo,
+        p.rh,
+        p.alergias,
+        p.antecedentes_medicos,
+        p.id_eps,
+        p.fecha_nacimiento,
+        p.genero,
+        p.estado_civil,
+        p.numero_contacto
+      FROM pacientes p
+      JOIN usuarios u ON p.id_paciente = u.id_usuario
     `);
-    connection.release();
-    return rows as any[];
+    // Asumiendo que el resultado es directamente el array de filas
+    return result || [];
   } catch (error) {
     console.error('Error getting patients:', error);
     return [];
   }
 };
+
 
 /**
  * Retrieves all diagnostics from the SQL database.
@@ -401,11 +409,10 @@ export const getPacientes = async (): Promise<any[]> => {
  */
 export const getDiagnosticos = async (): Promise<any[]> => {
   try {
-      const pool = await getConnection();
-      const connection = await pool.getConnection();
-    const [rows] = await connection.query('SELECT * FROM Diagnosticos');
-    connection.release();
-    return rows as any[];
+    const dbClient = await getConnection();
+    const result = await dbClient.sql('SELECT * FROM diagnosticos');
+    // Asumiendo que el resultado es directamente el array de filas
+    return result || [];
   } catch (error) {
     console.error('Error getting diagnostics:', error);
     return [];
@@ -418,13 +425,21 @@ export const getDiagnosticos = async (): Promise<any[]> => {
  * @returns void.
  */
 export const addPaciente = async (paciente: any): Promise<void> => {
+  // Asegúrate de que el objeto 'paciente' contenga todas las columnas requeridas por la tabla 'pacientes'
+  // y que los nombres de las claves coincidan exactamente con los nombres de las columnas.
+  let dbClient: Database | undefined;
   try {
-      const pool = await getConnection();
-      const connection = await pool.getConnection();
-    await connection.query('INSERT INTO Pacientes SET ?', paciente);
-    connection.release();
+    dbClient = await getConnection();
+    // Construcción dinámica de la consulta INSERT
+    const columns = Object.keys(paciente).join(', ');
+    const placeholders = Object.keys(paciente).map(() => '?').join(', ');
+    const values = Object.values(paciente);
+
+    // Asegúrate de que la tabla es 'pacientes'
+    await dbClient.sql(`INSERT INTO pacientes (${columns}) VALUES (${placeholders})`, values);
   } catch (error) {
     console.error('Error adding patient:', error);
+    throw error; // Lanzar el error para que sea manejado por el código que llama
   }
 };
 
@@ -440,20 +455,19 @@ export const addDiagnostico = async (diagnostico: {
   resultado: string;
   nivel_confianza: number;
 }): Promise<void> => {
+  let dbClient: Database | undefined;
   try {
-       const pool = await getConnection();
-       const connection = await pool.getConnection();
+    dbClient = await getConnection();
+    // await dbClient.sql('BEGIN TRANSACTION'); // Descomentar si es necesario
 
     // Obtener el id_tipo_examen basado en el nombre
-    const [tipoExamenRows] = await connection.query(
-        'SELECT id_tipo_examen FROM TiposExamen WHERE nombre = ?',
-        [diagnostico.tipoExamenNombre]
-    );
-
-    const tipoExamenId = (tipoExamenRows as any)[0]?.id_tipo_examen;
+    // Asegúrate de que la tabla es 'tiposexamen'
+    const tipoExamenRows = await dbClient.sql(`SELECT id_tipo_examen FROM tiposexamen WHERE nombre = ?`, [diagnostico.tipoExamenNombre]);
+    const tipoExamenId = tipoExamenRows?.[0]?.id_tipo_examen;
 
     if (!tipoExamenId) {
-        throw new Error(`Tipo de examen '${diagnostico.tipoExamenNombre}' no encontrado`);
+      // await dbClient.sql('ROLLBACK'); // Descomentar si se usa transacción explícita
+      throw new Error(`Tipo de examen '${diagnostico.tipoExamenNombre}' no encontrado`);
     }
 
     const diagnosticoToInsert = {
@@ -462,12 +476,23 @@ export const addDiagnostico = async (diagnostico: {
       id_tipo_examen: tipoExamenId, // Usar el ID obtenido
       resultado: diagnostico.resultado,
       nivel_confianza: diagnostico.nivel_confianza,
+      fecha_diagnostico: new Date().toISOString().split('T')[0], // Formato YYYY-MM-DD para SQLite
     };
 
-    await connection.query('INSERT INTO Diagnosticos SET ?', diagnosticoToInsert);
-    connection.release();
+    // Construcción dinámica de la consulta INSERT
+    const columns = Object.keys(diagnosticoToInsert).join(', ');
+    const placeholders = Object.keys(diagnosticoToInsert).map(() => '?').join(', ');
+    const values = Object.values(diagnosticoToInsert);
+
+    // Asegúrate de que la tabla es 'diagnosticos'
+    await dbClient.sql(`INSERT INTO diagnosticos (${columns}) VALUES (${placeholders})`, values);
+
+    // await dbClient.sql('COMMIT'); // Descomentar si se usa transacción explícita
   } catch (error) {
     console.error('Error adding diagnostic:', error);
+    // if (dbClient) { // Descomentar si se usa transacción explícita
+    //     await dbClient.sql('ROLLBACK');
+    // }
     throw error; // Lanzar el error para que sea manejado por el código que llama
   }
 };
@@ -475,119 +500,102 @@ export const addDiagnostico = async (diagnostico: {
 /**
  * Retrieves a user from the SQL database by their Firebase UID.
  * @param firebaseUid The Firebase UID of the user to retrieve.
- * @returns The user object if found.
+ * @returns The user object if found, including roles.
  */
 export const getUserByFirebaseUid = async (firebaseUid: string): Promise<any | null> => {
   try {
-    const pool = await getConnection();
-    const connection = await pool.getConnection();
-
+    const dbClient = await getConnection();
     // Obtener los datos básicos del usuario
-    const [userRows] = await connection.query(
-      `SELECT 
-        id_usuario, 
-        id_tipo_documento,
-        id_pais,
-        nui,
-        primer_nombre, 
-        segundo_nombre,
-        primer_apellido,
-        segundo_apellido,
-        correo, 
-        fecha_registro,
-        ultima_actividad,
-        estado,
-        firebase_uid
-      FROM Usuarios
-      WHERE firebase_uid = ?`,
+    // Asegúrate de que la tabla es 'usuarios'
+    const userResult = await dbClient.sql(
+      `SELECT id_usuario, id_tipo_documento, id_pais, nui, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, correo, fecha_registro, ultima_actividad, estado, firebase_uid FROM usuarios WHERE firebase_uid = ?`,
       [firebaseUid]
     );
-
-    const user = (userRows as any[])[0];
+    // Asumiendo que el resultado es un array y queremos el primer elemento
+    const user = userResult?.[0];
 
     if (!user) {
-      connection.release();
       return null;
     }
 
     // Obtener los roles del usuario
-    const [roleRows] = await connection.query(
-      `SELECT r.nombre 
-      FROM Roles r
-      JOIN UsuariosRoles ur ON r.id_rol = ur.id_rol
-      WHERE ur.id_usuario = ?`,
+    // Asegúrate de que las tablas son 'roles' y 'usuariosroles'
+    const roleResult = await dbClient.sql(
+      `SELECT r.nombre FROM roles r JOIN usuariosroles ur ON r.id_rol = ur.id_rol WHERE ur.id_usuario = ?`,
       [user.id_usuario]
     );
-
-    const roles = (roleRows as any[]).map(row => row.nombre);
-
-    connection.release();
+    // Asumiendo que roleResult es un array de objetos { nombre: string }
+    const roles = roleResult?.map((row: { nombre: string }) => row.nombre) || [];
 
     // Devolver el objeto de usuario con un array de roles
     return { ...user, roles };
-
   } catch (error) {
     console.error('Error al obtener usuario por Firebase UID:', error);
     return null;
   }
 };
 
-
 /**
  * Retrieves a user from the SQL database by their email.
+ * This implementation avoids using WHERE correo = ? directly in the initial query
+ * by fetching all users and filtering in application code.
+ * NOTE: This approach is less efficient for large databases compared to a direct WHERE clause.
  * @param email The email of the user to retrieve.
- * @returns The user object if found.
+ * @returns The user object if found, including roles.
  */
 export const getUser = async (email: string): Promise<any | null> => {
   try {
-    const pool = await getConnection();
-    const connection = await pool.getConnection();
-    const [rows] = await connection.query(
-      `SELECT 
-        u.id_usuario, 
-        u.correo, 
-        u.primer_nombre, 
-        u.primer_apellido,
-        u.estado,
-        r.nombre as rol
-      FROM Usuarios u
-      JOIN UsuariosRoles ur ON u.id_usuario = ur.id_usuario
-      JOIN Roles r ON ur.id_rol = r.id_rol
-      WHERE u.correo = ?`,
-      [email]
+    const dbClient = await getConnection();
+    console.log(`Attempting to find user with email: ${email}`);
+
+    // Obtener todos los usuarios para filtrar en la aplicación
+    // Seleccionamos solo las columnas necesarias para evitar cargar datos innecesarios
+    const allUsersResult = await dbClient.sql(
+      `SELECT id_usuario, id_tipo_documento, id_pais, nui, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, correo, fecha_registro, ultima_actividad, estado, firebase_uid FROM usuarios`
     );
-    connection.release();
-    return (rows as any[])[0] || null;
+
+    console.log('Fetched all users result type:', typeof allUsersResult);
+    console.log('Fetched all users result (first 5):', Array.isArray(allUsersResult) ? allUsersResult.slice(0, 5) : allUsersResult); // Log solo los primeros 5 para evitar logs extensos
+
+    let allUsers: any[] = [];
+
+    // Adaptar la extracción de resultados según el tipo de respuesta del driver
+    if (Array.isArray(allUsersResult)) {
+      allUsers = allUsersResult;
+    } else if (allUsersResult && typeof allUsersResult === 'object') {
+      if (Array.isArray(allUsersResult.rows)) {
+        allUsers = allUsersResult.rows;
+      } else if (Array.isArray(allUsersResult._rows)) {
+        allUsers = allUsersResult._rows;
+      }
+    }
+
+    console.log(`Total users fetched: ${allUsers.length}`);
+
+    // Buscar el usuario por correo en la lista obtenida
+    const user = allUsers.find(u => u.correo === email);
+
+    if (!user) {
+      console.log(`User with email ${email} not found in fetched list.`);
+      return null;
+    }
+
+    console.log('User found:', user);
+
+    // Obtener los roles del usuario encontrado
+    // Asegúrate de que las tablas son 'roles' y 'usuariosroles'
+    const roleResult = await dbClient.sql(
+      `SELECT r.nombre FROM roles r JOIN usuariosroles ur ON r.id_rol = ur.id_rol WHERE ur.id_usuario = ?`,
+      [user.id_usuario]
+    );
+    console.log('Role query result:', roleResult);
+    // Asumiendo que roleResult es un array de objetos { nombre: string }
+    const roles = roleResult?.map((row: { nombre: string }) => row.nombre) || [];
+    console.log('User roles:', roles);
+
+    return { ...user, roles };
   } catch (error) {
-    console.error('Error al obtener usuario:', error);
+    console.error('Error al obtener usuario por email (filtrando en app):', error);
     return null;
-  }
-};
-
-/**
- * Validates if a user has a specific role.
- * @param email The email of the user.
- * @param role The role to check.
- * @returns True if the user has the role, false otherwise.
- */
-export const validateUserRole = async (
-  email: string,
-  role: string
-): Promise<boolean> => {
-  try {
-       const pool = await getConnection();
-       const connection = await pool.getConnection();
-    const [rows] = await connection.query(
-      `SELECT ur.* FROM UsuariosRoles ur
-      JOIN Roles r ON ur.id_rol = r.id_rol
-      JOIN Usuarios u ON ur.id_usuario = u.id_usuario
-      WHERE u.correo = ? AND r.nombre = ?`, [email, role]
-    );
-
-    connection.release();
-    return (rows as any[]).length > 0;
-  } catch (error) {
-    console.error('Error validating user role:', error);
-    return false;
   }
 };

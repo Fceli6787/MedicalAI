@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { registerMedico } from '../../../../lib/db'; // Importar la nueva función registerMedico
+import { registerMedico } from '../../../../lib/db'; // Importar la función registerMedico de sqlitecloud
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { app } from '../../../../lib/firebase';
 
 export async function POST(request: NextRequest) {
   try {
     const {
-      id_tipo_documento,
-      id_pais,
+      tipoDocumentoCodigo, // Cambiado a código
+      paisCodigo, // Cambiado a código
       nui,
       primer_nombre,
       segundo_nombre,
@@ -15,13 +15,14 @@ export async function POST(request: NextRequest) {
       segundo_apellido,
       email,
       password,
-      id_especialidad,
+      id_especialidad, // Se mantiene como ID por ahora
       numero_tarjeta_profesional,
       años_experiencia,
     } = await request.json();
 
     // Validar campos requeridos para el registro de médico
-    if (!id_tipo_documento || !id_pais || !nui || !primer_nombre || !primer_apellido || !email || !password || !id_especialidad || !numero_tarjeta_profesional) {
+    // Ahora validamos por los códigos de tipo de documento y país
+    if (!tipoDocumentoCodigo || !paisCodigo || !nui || !primer_nombre || !primer_apellido || !email || !password || !id_especialidad || !numero_tarjeta_profesional) {
       return NextResponse.json(
         { error: 'Faltan campos requeridos para el registro de médico.' },
         { status: 400 }
@@ -33,20 +34,21 @@ export async function POST(request: NextRequest) {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const firebaseUser = userCredential.user;
 
-    // Register medical user in MySQL database using the new function
+    // Register medical user in SQLiteCloud database using the new function
+    // Pasamos los códigos y el ID de especialidad
     await registerMedico({
-      id_tipo_documento: parseInt(id_tipo_documento),
-      id_pais: parseInt(id_pais),
+      tipoDocumentoCodigo, // Pasamos el código
+      paisCodigo, // Pasamos el código
       nui,
       primer_nombre,
-      segundo_nombre,
+      segundo_nombre: segundo_nombre || null, // Asegurar que sea null si no se proporciona
       primer_apellido,
-      segundo_apellido,
-      correo: email,
+      segundo_apellido: segundo_apellido || null, // Asegurar que sea null si no se proporciona
+      correo: email, // La función registerMedico espera 'correo'
       firebase_uid: firebaseUser.uid,
-      id_especialidad: parseInt(id_especialidad),
+      id_especialidad: parseInt(id_especialidad), // Convertir a número
       numero_tarjeta_profesional,
-      años_experiencia: años_experiencia ? parseInt(años_experiencia) : null,
+      años_experiencia: años_experiencia ? parseInt(años_experiencia) : null, // Convertir a número o null
     });
 
     return NextResponse.json({ message: 'Médico registrado exitosamente' }, { status: 201 });
@@ -64,6 +66,13 @@ export async function POST(request: NextRequest) {
         { error: 'La contraseña es demasiado débil' },
         { status: 400 }
       );
+    }
+    // Manejar errores de la base de datos (ej. tipo de documento o país no encontrado)
+    if (error.message.includes('no encontrado')) {
+         return NextResponse.json(
+            { error: error.message }, // El mensaje de error de la función db ya es descriptivo
+            { status: 400 }
+         );
     }
     return NextResponse.json({ error: error.message || 'Registration failed' }, { status: 500 });
   }

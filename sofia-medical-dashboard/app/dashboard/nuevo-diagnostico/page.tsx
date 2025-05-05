@@ -4,8 +4,6 @@ import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import { useAuth } from "@/context/AuthContext"
-import * as dicomParser from "dicom-parser"
-import * as cornerstone from "cornerstone-core"
 import { analyzeImageWithOpenRouter } from "@/lib/openrouter"
 import { generateDiagnosisPDF } from "@/lib/generate-pdf"
 import { parseDicomFile, applyWindowLevel } from "@/src/lib/dicomService"
@@ -41,14 +39,14 @@ import {
 
 // Interface for diagnosis result (matching OpenRouterImageResponse structure)
 interface DiagnosticoResult {
-  condition?: string;
-  confidence?: number;
-  description?: string;
-  recomendaciones?: string[];
+  condition?: string
+  confidence?: number
+  description?: string
+  recomendaciones?: string[]
   pronostico?: {
-    tiempo_recuperacion?: string;
-    probabilidad_mejoria?: string;
-  };
+    tiempo_recuperacion?: string
+    probabilidad_mejoria?: string
+  }
 }
 
 export default function NuevoDiagnosticoPage() {
@@ -88,14 +86,15 @@ export default function NuevoDiagnosticoPage() {
   useEffect(() => {
     // Update confidence and result from diagnosis
     if (diagnosisResult?.confidence) {
-      setConfianza(diagnosisResult.confidence);
+      setConfianza(diagnosisResult.confidence)
     }
-    if (diagnosisResult?.condition) { // Access condition directly
-      setResultado(diagnosisResult.condition); // Access condition directly
+    if (diagnosisResult?.condition) {
+      // Access condition directly
+      setResultado(diagnosisResult.condition) // Access condition directly
     } else {
-      setResultado(null);
+      setResultado(null)
     }
-  }, [diagnosisResult]);
+  }, [diagnosisResult])
 
   // Click outside search results handler
   useEffect(() => {
@@ -181,13 +180,23 @@ export default function NuevoDiagnosticoPage() {
 
           // Use the DICOM service for parsing
           const dicomResult = await parseDicomFile(file)
-          
+
           if (!dicomResult.success) {
             throw new Error(dicomResult.error)
           }
 
           const { data } = dicomResult
-          const { width, height, pixelData, windowCenter, windowWidth, slope, intercept, bitsStored, pixelRepresentation } = data
+          const {
+            width,
+            height,
+            pixelData,
+            windowCenter,
+            windowWidth,
+            slope,
+            intercept,
+            bitsStored,
+            pixelRepresentation,
+          } = data
 
           // Create canvas for conversion
           const canvas = document.createElement("canvas")
@@ -204,15 +213,7 @@ export default function NuevoDiagnosticoPage() {
           }
 
           // Apply window/level adjustment using the service function
-          applyWindowLevel(
-            imageData.data,
-            windowCenter,
-            windowWidth,
-            slope,
-            intercept,
-            bitsStored,
-            pixelRepresentation
-          )
+          applyWindowLevel(imageData.data, windowCenter, windowWidth, slope, intercept, bitsStored, pixelRepresentation)
 
           // Put the adjusted image data on the canvas
           ctx.putImageData(imageData, 0, 0)
@@ -269,19 +270,18 @@ export default function NuevoDiagnosticoPage() {
     setError(null)
 
     try {
-      const result = await analyzeImageWithOpenRouter(imageBase64);
+      const result = await analyzeImageWithOpenRouter(imageBase64)
 
-      console.log("Resultado de analyzeImageWithOpenRouter:", result);
+      console.log("Resultado de analyzeImageWithOpenRouter:", result)
 
       // Simplificar la actualización del estado con el resultado directo
-      setDiagnosisResult(result);
-      setAnalysisComplete(true);
-
+      setDiagnosisResult(result)
+      setAnalysisComplete(true)
     } catch (err) {
-      setError("Error al analizar la imagen. Por favor, intente nuevamente.");
-      console.error("Error en handleAnalyze:", err);
+      setError("Error al analizar la imagen. Por favor, intente nuevamente.")
+      console.error("Error en handleAnalyze:", err)
     } finally {
-      setIsAnalyzing(false);
+      setIsAnalyzing(false)
     }
   }
 
@@ -366,7 +366,7 @@ export default function NuevoDiagnosticoPage() {
   }
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="w-full px-6 py-8 space-y-8">
       {loading && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg flex flex-col items-center">
@@ -625,7 +625,8 @@ export default function NuevoDiagnosticoPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-gray-500">Confianza:</span>
-                            <span className="font-medium">{confianza ? `${Math.round(confianza)}%` : "N/A"}</span> {/* Remove multiplication by 100 */}
+                            <span className="font-medium">{confianza ? `${Math.round(confianza)}%` : "N/A"}</span>{" "}
+                            {/* Remove multiplication by 100 */}
                           </div>
                         </div>
                       </div>
