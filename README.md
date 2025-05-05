@@ -25,17 +25,18 @@ Para garantizar el éxito del desarrollo y una experiencia excepcional, este pro
 
 *   **Next.js:** Entorno de desarrollo orientado a eventos, usado para implementar funcionalidades clave como inicio de sesión y autenticación de usuarios.
     ```bash
-    pnpm install 
+    npm install -g pnpm
+    pnpm install
     ```
 *   **API de OpenRouter.ai:** Utiliza el modelo **Qwen2.5 VL 72B Instruct**, previamente entrenado específicamente para el área de Medicina y Salud. Este modelo cuenta con **capacidades avanzadas de razonamiento y solución de problemas**, haciéndolo ideal para ser un asistente médico efectivo.
 
 ### 🗄️ Gestión de Datos
 
-*   **MySQL:** Sistema de gestión de bases de datos encargado de almacenar información de los usuarios, como correo electrónico, nombre, chats archivados y tipo de inicio de sesión (local o mediante Firebase).
-    *   La base de datos debe cargarse previamente desde el archivo `sofia/database.sql` mediante el shell de **XAMPP**.
-        ```bash
-        mysql -u root -p < ruta-a-sofia/database.sql
-        ```
+*   **SQLite Cloud:** Sistema de gestión de bases de datos encargado de almacenar información de los usuarios, como correo electrónico, nombre, chats archivados y tipo de inicio de sesión.
+    *   La base de datos debe cargarse previamente desde el archivo `sofia/database.sql` mediante el ingreso en [SQLite Cloud](https://sqlitecloud.io/).
+    *   Configura la conexión a la base de datos en el archivo `.env.local` con la URL, puerto y API key proporcionados por SQLite Cloud.
+    ```env
+    DATABASE_URL=sqlitecloud://<api-key>@<host>:<port>/sofia/database.sql
     ```
 
 ---
@@ -47,19 +48,19 @@ Para garantizar el éxito del desarrollo y una experiencia excepcional, este pro
 
 A través de system instructions, el modelo Qwen 2.5 VL puede ser guiado específicamente para áreas como Medicina y Salud. Estas instrucciones definen cómo debe comportarse y responder dentro de este contexto, asegurando que las respuestas sean adaptadas y extremadamente precisas, basándose en conocimientos médicos relevantes y actualizados hasta el año 2025. Esto lo convierte en una herramienta ideal para profesionales de la salud que requieren diagnósticos o soluciones basadas en información científica confiable.
 
-*   **🧠 Razonamiento Avanzado:**  
+*   **🧠 Razonamiento Avanzado:**
     Este modelo experimental está diseñado para ofrecer capacidades superiores de análisis, solución de problemas y toma de decisiones en contextos complejos, como los médicos. Su rendimiento es eficiente y rápido, lo que permite abordar situaciones críticas con precisión y agilidad.
 
-*   **🖼️ Multimodalidad (Procesamiento de Imágenes y PDF):**  
+*   **🖼️ Multimodalidad (Procesamiento de Imágenes y PDF):**
     Una de las principales ventajas de Qwen 2.5 VL es su capacidad multimodal. Puede procesar no solo texto, sino también imágenes, videos y datos de audio. Además, ha sido mejorado para interpretar y extraer información relevante de documentos PDF, lo que amplía enormemente su utilidad en entornos profesionales donde se manejan informes técnicos, artículos científicos y gráficos médicos.
 
-*   **📈 Escalabilidad:**  
+*   **📈 Escalabilidad:**
     El modelo está diseñado para funcionar eficientemente incluso bajo cargas pesadas. Puede manejar múltiples solicitudes simultáneas sin comprometer la velocidad ni la estabilidad del sistema. Esta característica es crucial para aplicaciones clínicas o industriales donde el tiempo de respuesta es esencial.
 
-*   **🌐 Capacidades Multilingües:**  
+*   **🌐 Capacidades Multilingües:**
     Aunque no se menciona explícitamente en los datos recopilados, dado que Qwen ha desarrollado modelos previos con soporte multilingüe, podemos inferir que Qwen 2.5 VL 72B Instruct probablemente ofrezca compatibilidad con varios idiomas, facilitando su uso global.
 
-*   **🔒 Privacidad y Seguridad:**  
+*   **🔒 Privacidad y Seguridad:**
     Al utilizar este modelo, los usuarios tienen la opción de elegir entre respuestas más precisas asumiendo cierto acceso a datos personales o históricos previos. Esto destaca la importancia de la privacidad en su diseño, aunque siempre debe usarse con precaución según las necesidades del usuario.
 
 ---
@@ -80,12 +81,12 @@ Sigue estos pasos para poner en marcha el proyecto:
     ```
 3.  **Configurar la base de datos:**
 
-    *   Asegúrate de que **XAMPP** esté ejecutándose.
-    *   Carga el archivo de base de datos ubicado en `sofia/database.sql` en MySQL utilizando el shell de **XAMPP**:
-
-        ```bash
-        mysql -u root -p < ruta-a-sofia/database.sql
-        ```
+    *   Asegúrate de que **SQLite Cloud** esté ejecutándose.
+    *   Carga el archivo de base de datos ubicado en `sofia/database.sql` en SQLite Cloud utilizando el ingreso en [SQLite Cloud](https://sqlitecloud.io/).
+    *   Configura la conexión a la base de datos en el archivo `.env.local` con la URL, puerto y API key proporcionados por SQLite Cloud.
+    ```env
+    DATABASE_URL=sqlitecloud://<api-key>@<host>:<port>/sofia/database.sql
+    ```
 4.  **Configurar las variables de entorno:**
 
     *   El proyecto incluye dos archivos `.env`:
@@ -107,4 +108,4 @@ Sigue estos pasos para poner en marcha el proyecto:
 * **Desarrolladores:** Juan Blanco, Michael Romero
 * **Desarrollador Backend:** Jheison Sosa
 * **Desarrollador Frontend:** Andres Celi
-* **Ingeniero de Calidad de Software (QA):** Cristian Zabala
+* **(Antes) Ingeniero de Calidad de Software (QA):, Ahora (Desarrollador)** Cristian Zabala
