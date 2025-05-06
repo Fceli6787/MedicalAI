@@ -16,7 +16,7 @@ Este modelo está diseñado para ofrecer un valioso apoyo a los profesionales m�
 Para garantizar el éxito del desarrollo y una experiencia excepcional, este proyecto integra las siguientes tecnologías:
 
 ### 💻 Frontend
-
+<img src="https://res.cloudinary.com/harendra21/image/upload/v1742472944/withcodeexample.com/building-a-react-app-with-tailwind-css_e0pv0i.jpg" alt="React logo" width= "300"/>
 *   **React:** Framework para desarrollar una interfaz de usuario moderna, interactiva y dinámica.
 *   **CSS:** Encargado del diseño visual, asegurando una experiencia atractiva y funcional para los usuarios.
 
