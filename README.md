@@ -1,4 +1,3 @@
-![image](https://github.com/user-attachments/assets/d0c5b089-5337-4439-b7f2-4f945478ab59)
  # SOF-IA: Asistente de Inteligencia Artificial Médica
 ![Logo SOF-IA](https://github.com/user-attachments/assets/47933f0a-6f45-475b-b312-8372fa85eb08)
 
