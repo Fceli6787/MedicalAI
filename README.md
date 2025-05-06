@@ -21,7 +21,7 @@ Para garantizar el éxito del desarrollo y una experiencia excepcional, este pro
 *   **CSS:** Encargado del diseño visual, asegurando una experiencia atractiva y funcional para los usuarios.
 
 ### ⚙️ Backend
-<img src="https://images.seeklogo.com/logo-png/32/1/next-js-logo-png_seeklogo-321806.png" alt="Next.js logo" width= "300"/>
+<img src="https://images.seeklogo.com/logo-png/32/1/next-js-logo-png_seeklogo-321806.png" alt="Next logo" width= "300"/>
 *   **Next.js:** Entorno de desarrollo orientado a eventos, usado para implementar funcionalidades clave como inicio de sesión y autenticación de usuarios.
     ```bash
     npm install -g pnpm
