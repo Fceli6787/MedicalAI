@@ -1,4 +1,4 @@
-
+![image](https://github.com/user-attachments/assets/d0c5b089-5337-4439-b7f2-4f945478ab59)
  # SOF-IA: Asistente de Inteligencia Artificial Médica
 ![Logo SOF-IA](https://github.com/user-attachments/assets/47933f0a-6f45-475b-b312-8372fa85eb08)
 
@@ -31,7 +31,7 @@ Para garantizar el éxito del desarrollo y una experiencia excepcional, este pro
 *   **API de OpenRouter.ai:** Utiliza el modelo **Qwen2.5 VL 72B Instruct**, previamente entrenado específicamente para el área de Medicina y Salud. Este modelo cuenta con **capacidades avanzadas de razonamiento y solución de problemas**, haciéndolo ideal para ser un asistente médico efectivo.
 
 ### 🗄️ Gestión de Datos
-
+<img src="https://sqlitecloud.io/social/logo.png" alt="SQLite logo" width= "300"/>
 *   **SQLite Cloud:** Sistema de gestión de bases de datos encargado de almacenar información de los usuarios, como correo electrónico, nombre, chats archivados y tipo de inicio de sesión.
     *   La base de datos debe cargarse previamente desde el archivo `sofia/database.sql` mediante el ingreso en [SQLite Cloud](https://sqlitecloud.io/).
     *   Configura la conexión a la base de datos en el archivo `.env.local` con la URL, puerto y API key proporcionados por SQLite Cloud.
