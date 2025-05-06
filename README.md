@@ -76,7 +76,7 @@ Sigue estos pasos para poner en marcha el proyecto:
 2.  **Instalar dependencias:**
 
     ```bash
-    npm install
+    pnpm install
     ```
 3.  **Configurar la base de datos:**
 
