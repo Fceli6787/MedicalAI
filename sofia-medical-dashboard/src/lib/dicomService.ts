@@ -2,8 +2,9 @@ import * as dicomParser from "dicom-parser"
 import * as cornerstone from "cornerstone-core"
 
 // Interface for DICOM data
-interface DicomData {
-  pixelData: Uint8Array
+// Exportar esta interfaz también si se usa fuera
+export interface DicomData {
+  pixelData: Uint8Array // Podría ser Uint16Array o Int16Array dependiendo del DICOM
   width: number
   height: number
   windowCenter: number
@@ -11,7 +12,7 @@ interface DicomData {
   slope: number
   intercept: number
   bitsStored: number
-  pixelRepresentation: number
+  pixelRepresentation: number // 0 = unsigned, 1 = signed
   transferSyntax: string
 }
 
@@ -26,7 +27,8 @@ interface DicomSuccess {
   data: DicomData
 }
 
-type DicomResult = DicomError | DicomSuccess
+// --- CORRECCIÓN: Añadir export ---
+export type DicomResult = DicomError | DicomSuccess
 
 /**
  * Parses a DICOM file and extracts relevant image data
@@ -58,36 +60,43 @@ export const parseDicomFile = async (file: File): Promise<DicomResult> => {
       throw new Error("No se encontró datos de píxeles en el archivo DICOM")
     }
     
+    // IMPORTANTE: Determinar el tipo correcto de pixelData (Uint8, Uint16, Int16)
+    // Esto depende de Photometric Interpretation, Bits Allocated, Bits Stored, Pixel Representation
+    // Por ahora, mantenemos Uint8Array, pero esto podría necesitar ajustes
+    // para una correcta interpretación y aplicación de window/level.
     const pixelData = new Uint8Array(arrayBuffer, pixelDataElement.dataOffset, pixelDataElement.length)
     
-    // Extract windowing parameters
-    const windowCenter = dataSet.int16("x00281050") || 50
-    const windowWidth = dataSet.int16("x00281051") || 400
-    const slope = Number.parseFloat(dataSet.string("x00281053") || "1")
-    const intercept = Number.parseFloat(dataSet.string("x00281052") || "0")
+    // Extract windowing parameters (con valores por defecto razonables)
+    const windowCenter = dataSet.floatString("x00281050") ?? 50 // Usar floatString y ?? para default
+    const windowWidth = dataSet.floatString("x00281051") ?? 400 // Usar floatString y ?? para default
+    // Usar floatString para slope/intercept y proveer defaults numéricos
+    const slope = dataSet.floatString("x00281053") ?? 1 
+    const intercept = dataSet.floatString("x00281052") ?? 0
     
     // Extract bit information
-    const bitsStored = dataSet.uint16("x00280101") || 16
-    const pixelRepresentation = dataSet.uint16("x00280103") || 0
+    const bitsStored = dataSet.uint16("x00280101") || 16 // Default a 16 si no está presente
+    const pixelRepresentation = dataSet.uint16("x00280103") || 0 // 0=unsigned, 1=signed
     
     // Extract transfer syntax
-    const transferSyntax = dataSet.string("x00020010") || "1.2.840.10008.1.2"
+    const transferSyntax = dataSet.string("x00020010") || "1.2.840.10008.1.2" // Default a Implicit VR Little Endian
     
-    // Check for compressed DICOM
-    if (transferSyntax.includes("1.2.840.10008.1.2.4")) {
-      throw new Error("Archivos DICOM comprimidos no soportados. Use un archivo sin compresión.")
+    // Check for compressed DICOM (simplificado, puede necesitar más UIDs)
+    if (transferSyntax.startsWith("1.2.840.10008.1.2.4") || transferSyntax.startsWith("1.2.840.10008.1.2.5")) {
+       console.warn("Advertencia: Archivo DICOM parece estar comprimido. La visualización podría fallar.");
+      // Considerar lanzar error o intentar decodificar si se añaden librerías para ello.
+      // throw new Error("Archivos DICOM comprimidos no soportados actualmente.")
     }
 
-    // Configure cornerstone metadata provider
-    cornerstone.metaData.addProvider((type, imageId) => {
-      if (type === "dicom") return dataSet
-      return null
-    }, 1000)
+    // Configure cornerstone metadata provider (esto es para cornerstone.js, puede no ser necesario si solo conviertes a PNG)
+    // cornerstone.metaData.addProvider((type, imageId) => {
+    //   if (type === "dicom") return dataSet
+    //   return null
+    // }, 1000)
 
     return {
       success: true,
       data: {
-        pixelData,
+        pixelData, // Podría necesitar ser el array buffer original o un array tipado diferente
         width,
         height,
         windowCenter,
@@ -109,8 +118,12 @@ export const parseDicomFile = async (file: File): Promise<DicomResult> => {
 }
 
 /**
- * Applies window/level adjustment to image data
- * @param data Image data to adjust
+ * Applies window/level adjustment to image data (for display purposes, typically 8-bit)
+ * NOTE: This implementation assumes input pixelData is already scaled or needs scaling
+ * to fit into the 8-bit range for display. The logic might need significant
+ * adjustments based on the actual data type and range of the raw DICOM pixelData.
+ * @param displayData The Uint8ClampedArray (RGBA) for the canvas ImageData
+ * @param rawPixelData The original pixel data array (could be Int16Array, Uint16Array etc.)
  * @param windowCenter Center of the window
  * @param windowWidth Width of the window
  * @param slope Rescale slope
@@ -119,34 +132,57 @@ export const parseDicomFile = async (file: File): Promise<DicomResult> => {
  * @param pixelRepresentation Pixel representation type
  */
 export const applyWindowLevel = (
-  data: Uint8ClampedArray,
+  displayData: Uint8ClampedArray, // Target RGBA array for canvas
+  rawPixelData: Int16Array | Uint16Array | Uint8Array, // Source pixel data
+  width: number,
+  height: number,
   windowCenter: number,
   windowWidth: number,
   slope: number,
-  intercept: number,
-  bitsStored: number,
-  pixelRepresentation: number
+  intercept: number
 ): void => {
-  const maxValue = Math.pow(2, bitsStored) - 1
-  const minValue = pixelRepresentation === 1 ? -maxValue / 2 : 0
   
-  for (let i = 0; i < data.length; i += 4) {
-    let value = data[i] * slope + intercept
-    value = Math.max(minValue, Math.min(maxValue, value))
+  const numPixels = width * height;
+  if (displayData.length !== numPixels * 4) {
+      console.error("applyWindowLevel: Mismatch between displayData length and image dimensions.");
+      return;
+  }
+   if (rawPixelData.length !== numPixels) {
+      console.error("applyWindowLevel: Mismatch between rawPixelData length and image dimensions.");
+      return;
+  }
+
+  const wc = windowCenter;
+  const ww = windowWidth;
+  const lowerBound = wc - ww / 2;
+  const upperBound = wc + ww / 2;
+
+  for (let i = 0; i < numPixels; i++) {
+    // 1. Get raw pixel value
+    let rawValue = rawPixelData[i];
     
-    const windowMin = windowCenter - windowWidth / 2
-    const windowMax = windowCenter + windowWidth / 2
-    
-    let normalized = 0
-    if (value <= windowMin) {
-      normalized = 0
-    } else if (value >= windowMax) {
-      normalized = 255
+    // 2. Apply rescale slope and intercept (HU conversion for CT, etc.)
+    let rescaledValue = rawValue * slope + intercept;
+
+    // 3. Apply windowing
+    let windowedValue = 0; // Default to black
+    if (rescaledValue <= lowerBound) {
+      windowedValue = 0;
+    } else if (rescaledValue >= upperBound) {
+      windowedValue = 255; // White
     } else {
-      normalized = Math.round(((value - windowMin) / windowWidth) * 255)
+      // Scale linearly within the window
+      windowedValue = ((rescaledValue - lowerBound) / ww) * 255;
     }
-    
-    data[i] = data[i + 1] = data[i + 2] = normalized
-    data[i + 3] = 255
+
+    // 4. Clamp the value to 0-255
+    const clampedValue = Math.max(0, Math.min(255, Math.round(windowedValue)));
+
+    // 5. Set RGBA values in the display buffer
+    const idx = i * 4;
+    displayData[idx] = clampedValue;     // R
+    displayData[idx + 1] = clampedValue; // G
+    displayData[idx + 2] = clampedValue; // B
+    displayData[idx + 3] = 255;          // A (opaque)
   }
 }

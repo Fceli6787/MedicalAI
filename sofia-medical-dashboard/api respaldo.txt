@@ -4,16 +4,11 @@ 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
 
 2.
 API sin uso de limite hasta 24 horas
-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
+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
 
 3.
 API sin uso de limite hasta 24 horas
 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
-
-4.
-API sin uso de limite hasta 24 horas
-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
-
 
 5.
 API sin uso de limite hasta 24 horas
@@ -25,4 +20,4 @@ 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
 
 
 API GEMINI
-AIzaSyDIxYR9441Ql5oEWoFuWS6c-EF9_IAFAds
+AIzaSyCFCMMleGIWXU_Ex3l075R5hr96ewiA1-Q

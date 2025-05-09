@@ -1,4 +1,4 @@
--- Base de datos: `sofiamedicalai`
+-- Base de datos: `sofia-medical`
 
 -- --------------------------------------------------------
 

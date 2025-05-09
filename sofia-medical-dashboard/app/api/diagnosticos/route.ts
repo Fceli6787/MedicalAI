@@ -1,48 +1,119 @@
-import { NextResponse } from 'next/server';
-import { getDiagnosticos, addDiagnostico } from '@/lib/db'; // Importar funciones de lib/db
+import { type NextRequest, NextResponse } from 'next/server';
+// Importar la función para guardar el diagnóstico completo y la función para obtenerlos
+import { addDiagnosticoCompleto, getDiagnosticos } from '@/lib/db'; 
 
-export async function POST(request: Request) {
+// Interfaz para el resultado del diagnóstico de la IA (debe coincidir con la de lib/db.ts y el frontend)
+interface DiagnosisAIResult {
+  condition?: string;
+  confidence?: number;
+  description?: string;
+  recomendaciones?: string[];
+  pronostico?: {
+    tiempo_recuperacion?: string;
+    probabilidad_mejoria?: string;
+  };
+}
+
+// Interfaz para el cuerpo de la solicitud POST esperado (debe coincidir con el payload enviado desde handleSave)
+interface DiagnosticoPostData {
+  id_paciente: number;
+  id_medico: number;
+  tipoExamenNombre: string;
+  imageBase64?: string | null;
+  tipoImagen?: string | null;
+  originalFileName?: string | null;
+  diagnosisAIResult: DiagnosisAIResult;
+}
+
+export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
-    // La lógica de manejo de imágenes debe ser adaptada si se desea guardar en la DB.
-    // Por ahora, solo procesaremos los datos del diagnóstico.
-    const diagnosticoData = JSON.parse(formData.get('diagnostico') as string);
+    console.log('API POST /api/diagnosticos - Solicitud recibida.');
+    // Esperar un cuerpo JSON
+    const requestBody = await request.json(); 
+    console.log('API POST /api/diagnosticos - Cuerpo de la solicitud:', JSON.stringify(requestBody, null, 2));
 
-    // Validar datos requeridos para addDiagnostico
-    if (!diagnosticoData.id_paciente || !diagnosticoData.tipoExamenNombre || !diagnosticoData.resultado || diagnosticoData.nivel_confianza === undefined || !diagnosticoData.id_medico) {
-       return NextResponse.json({ error: 'Faltan campos obligatorios para el diagnóstico' }, { status: 400 });
+    if (!requestBody || typeof requestBody !== 'object') {
+      return NextResponse.json({ error: 'Cuerpo de la solicitud inválido o vacío.' }, { status: 400 });
     }
 
-    // Llamar a la función addDiagnostico de lib/db.ts
-    await addDiagnostico({
-      id_paciente: diagnosticoData.id_paciente,
-      id_medico: diagnosticoData.id_medico,
-      tipoExamenNombre: diagnosticoData.tipoExamenNombre,
-      resultado: diagnosticoData.resultado,
-      nivel_confianza: diagnosticoData.nivel_confianza,
+    // Extraer datos del cuerpo JSON
+    const {
+      id_paciente,
+      id_medico,
+      tipoExamenNombre,
+      imageBase64,
+      tipoImagen,
+      originalFileName,
+      diagnosisAIResult,
+    } = requestBody as DiagnosticoPostData;
+
+    // Validar campos obligatorios básicos
+    if (id_paciente === undefined || id_paciente === null) {
+      return NextResponse.json({ error: 'Falta el campo obligatorio: id_paciente' }, { status: 400 });
+    }
+    if (id_medico === undefined || id_medico === null) {
+      return NextResponse.json({ error: 'Falta el campo obligatorio: id_medico' }, { status: 400 });
+    }
+    if (!tipoExamenNombre) {
+      return NextResponse.json({ error: 'Falta el campo obligatorio: tipoExamenNombre' }, { status: 400 });
+    }
+    if (!diagnosisAIResult) {
+      return NextResponse.json({ error: 'Falta el campo obligatorio: diagnosisAIResult' }, { status: 400 });
+    }
+    // Validar que el resultado de la IA tenga al menos condición o descripción
+    if (diagnosisAIResult.condition === undefined && diagnosisAIResult.description === undefined) {
+        return NextResponse.json({ error: 'El objeto diagnosisAIResult debe contener al menos condition o description.' }, { status: 400 });
+    }
+
+    // Llamar a la función addDiagnosticoCompleto de lib/db.ts
+    console.log('API POST /api/diagnosticos - Llamando a addDiagnosticoCompleto...');
+    const nuevoDiagnosticoId = await addDiagnosticoCompleto({
+      id_paciente: Number(id_paciente),
+      id_medico: Number(id_medico),
+      tipoExamenNombre,
+      imageBase64: imageBase64 || null,
+      tipoImagen: tipoImagen || null,
+      originalFileName: originalFileName || null,
+      diagnosisAIResult,
     });
+    console.log(`API POST /api/diagnosticos - Diagnóstico completo guardado con ID: ${nuevoDiagnosticoId}`);
 
     // Respuesta exitosa
-    return NextResponse.json({ message: 'Diagnóstico guardado exitosamente en la base de datos' }, { status: 201 });
+    return NextResponse.json(
+      {
+        message: 'Diagnóstico completo guardado exitosamente.',
+        id_diagnostico: nuevoDiagnosticoId,
+      },
+      { status: 201 } // 201 Created es más apropiado para POST exitoso
+    );
 
   } catch (error: any) {
-    console.error('Error en el handler POST de diagnosticos:', error);
+    console.error('Error en el handler POST de /api/diagnosticos:', error);
+    if (error.message.includes("no encontrado")) { // Error específico de tipo de examen no encontrado
+        return NextResponse.json(
+            { error: error.message },
+            { status: 404 } 
+        );
+    }
+    // Error genérico del servidor
     return NextResponse.json(
-      { error: error.message || 'Error al guardar el diagnóstico en la base de datos' },
+      { error: error.message || 'Error interno al guardar el diagnóstico completo.' },
       { status: 500 }
     );
   }
 }
 
-export async function GET() {
+// El GET se mantiene igual para listar diagnósticos
+export async function GET(request: NextRequest) { 
   try {
-    // Llamar a la función getDiagnosticos de lib/db.ts
+    console.log('API GET /api/diagnosticos - Solicitud recibida.');
     const diagnosticos = await getDiagnosticos();
+    console.log(`API GET /api/diagnosticos - ${diagnosticos.length} diagnósticos obtenidos.`);
     return NextResponse.json(diagnosticos);
   } catch (error: any) {
-    console.error('Error fetching diagnosticos:', error);
+    console.error('Error en GET /api/diagnosticos:', error);
     return NextResponse.json(
-      { error: error.message || 'Error al leer los diagnósticos de la base de datos' },
+      { error: error.message || 'Error al leer los diagnósticos de la base de datos.' },
       { status: 500 }
     );
   }

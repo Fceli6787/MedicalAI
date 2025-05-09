@@ -35,7 +35,7 @@ export const INSERT_MEDICO = `
 
 export const SELECT_ALL_PACIENTES = `
   SELECT
-    p.id_paciente,
+    p.id_usuario,
     u.primer_nombre,
     u.segundo_nombre,
     u.primer_apellido,
@@ -45,10 +45,10 @@ export const SELECT_ALL_PACIENTES = `
     p.grupo_sanguineo,
     p.alergias,
     p.antecedentes_medicos,
-    (SELECT COUNT(*) FROM Diagnosticos d WHERE d.id_paciente = p.id_paciente) AS diagnosticosTotales,
-    (SELECT MAX(fecha_diagnostico) FROM Diagnosticos d WHERE d.id_paciente = p.id_paciente) AS ultimo_diagnostico
+    (SELECT COUNT(*) FROM Diagnosticos d WHERE d.id_paciente = p.id_usuario) AS diagnosticosTotales,
+    (SELECT MAX(fecha_diagnostico) FROM Diagnosticos d WHERE d.id_paciente = p.id_usuario) AS ultimo_diagnostico
   FROM Pacientes p
-  JOIN Usuarios u ON p.id_paciente = u.id_usuario
+  JOIN Usuarios u ON p.id_usuario = u.id_usuario
 `;
 
 export const SELECT_ALL_DIAGNOSTICOS = 'SELECT * FROM Diagnosticos';

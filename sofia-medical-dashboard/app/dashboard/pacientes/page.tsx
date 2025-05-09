@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button" // Assuming Button includes buttonVariants
+import { Button } from "@/components/ui/button" 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -19,94 +19,119 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Search, Edit, Trash2, FileText, ChevronLeft, ChevronRight, UserPlus, AlertCircle, Loader2 } from "lucide-react" // Added Loader2
+import { Search, Edit, Trash2, FileText, ChevronLeft, ChevronRight, UserPlus, AlertCircle, Loader2, CalendarIcon } from "lucide-react" 
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
-// Removed cn and Link as they weren't used in the provided snippet after refactor focus
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover" 
+import { Calendar } from "@/components/ui/calendar" 
+import { format } from "date-fns" // Importar directamente desde date-fns
+import { es } from 'date-fns/locale'; // Importar locale español
+import { cn } from "@/lib/utils" 
 
-// Define the structure of a patient based on usage
+// Interfaz Paciente actualizada para incluir fecha_nacimiento
 interface Paciente {
   id_usuario: number
   primer_nombre: string
   primer_apellido: string
-  edad?: number | null // Made optional as it might be missing
-  genero?: string | null // Made optional
-  fecha_registro?: string | null // Made optional
-  ultimo_diagnostico?: string | null // Made optional
-  diagnosticosTotales?: number | null // Made optional
-  // Add other potential fields if needed
+  fecha_nacimiento?: string | null // Campo clave para mostrar
+  genero?: string | null 
+  // fecha_registro ya no se usa en la tabla
+  ultimo_diagnostico?: string | null 
+  diagnosticosTotales?: number | null 
+  // Añadir otros campos si se obtienen de la API y se necesitan
 }
 
 export default function PacientesPage() {
   const { user, loading: authLoading } = useAuth()
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
-  const [pacientes, setPacientes] = useState<Paciente[]>([]) // Use the interface
+  const [pacientes, setPacientes] = useState<Paciente[]>([]) 
   const [loadingPacientes, setLoadingPacientes] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [newPatient, setNewPatient] = useState({
-    nombre: "",
-    apellido: "",
-    edad: "",
+    primer_nombre: "", 
+    primer_apellido: "", 
+    fecha_nacimiento: "", 
     genero: "",
     email: "",
-    telefono: "",
-    direccion: "",
+    telefono_contacto: "", 
+    direccion_residencial: "", 
+    tipoDocumentoCodigo: "",
+    paisCodigo: "",
+    nui: "",
+    segundo_nombre: "",
+    segundo_apellido: "",
+    grupo_sanguineo: "", 
+    ocupacion: "", 
+    info_seguro_medico: "", 
+    contacto_emergencia: "", 
   })
 
   const { toast } = useToast()
   const itemsPerPage = 10
 
-  // --- Data Fetching Effect ---
-  useEffect(() => {
-    const fetchData = async () => {
-      // Ensure user is loaded and has the correct role before fetching
-      if (!user || user.rol === "paciente") {
-        setError(user && user.rol === "paciente" ? "No tiene permisos para acceder a esta página." : null)
-        setLoadingPacientes(false)
-        setPacientes([]) // Clear patients if not authorized
-        return
-      }
+  // --- Función para formatear fecha ---
+  const formatDisplayDate = (dateString: string | null | undefined): string => {
+    if (!dateString) return "N/A";
+    try {
+      // Asume que la fecha viene como YYYY-MM-DD
+      const date = new Date(dateString + 'T00:00:00'); // Añadir T00:00:00 para evitar problemas de zona horaria
+      return format(date, 'dd/MM/yyyy', { locale: es }); // Formato dd/MM/yyyy
+    } catch (e) {
+      console.error("Error formatting date:", dateString, e);
+      return "Fecha inválida";
+    }
+  };
 
-      setLoadingPacientes(true) // Start loading state for fetch
-      setError(null) // Reset error before fetch
-
-      try {
-        const response = await fetch("/api/dashboard/pacientes")
-        const data = await response.json()
-
-        if (response.ok && data.pacientes) {
-          // Basic validation/transformation if needed
-          const validatedPacientes = data.pacientes.map((p: any) => ({
-            id_usuario: p.id_usuario,
-            primer_nombre: p.primer_nombre || "Sin nombre",
-            primer_apellido: p.primer_apellido || "Sin apellido",
-            edad: p.edad,
-            genero: p.genero,
-            fecha_registro: p.fecha_registro ? new Date(p.fecha_registro).toLocaleDateString() : "N/A", // Format date
-            ultimo_diagnostico: p.ultimo_diagnostico,
-            diagnosticosTotales: p.diagnosticosTotales || 0, // Default to 0
-          }))
-          setPacientes(validatedPacientes)
-        } else {
-          setError(data.error || "Error al cargar los pacientes. Intente de nuevo.")
-          setPacientes([]) // Clear patients on error
-        }
-      } catch (err) {
-        console.error("Error fetching patients:", err)
-        setError("No se pudo conectar al servidor para cargar los pacientes.")
-        setPacientes([]) // Clear patients on fetch error
-      } finally {
-        setLoadingPacientes(false) // End loading state
-      }
+  // --- Data Fetching Function ---
+  const fetchData = async () => {
+    if (!user || user.rol === "paciente") {
+      setError(user && user.rol === "paciente" ? "No tiene permisos para acceder a esta página." : null)
+      setLoadingPacientes(false)
+      setPacientes([]) 
+      return
     }
 
-    // Fetch data only when auth is resolved
+    setLoadingPacientes(true) 
+    setError(null) 
+
+    try {
+      // Asegúrate que esta API devuelva 'fecha_nacimiento' para cada paciente
+      const response = await fetch("/api/dashboard/pacientes") 
+      const data = await response.json()
+
+      if (response.ok && data.pacientes) {
+        const validatedPacientes = data.pacientes.map((p: any) => ({
+          id_usuario: p.id_usuario,
+          primer_nombre: p.primer_nombre || "Sin nombre",
+          primer_apellido: p.primer_apellido || "Sin apellido",
+          fecha_nacimiento: p.fecha_nacimiento, // Obtener fecha_nacimiento de la API
+          genero: p.genero,
+          // fecha_registro ya no es necesario mapearlo para la tabla
+          ultimo_diagnostico: p.ultimo_diagnostico,
+          diagnosticosTotales: p.diagnosticosTotales || 0, 
+        }))
+        setPacientes(validatedPacientes)
+      } else {
+        setError(data.error || "Error al cargar los pacientes. Intente de nuevo.")
+        setPacientes([]) 
+      }
+    } catch (err) {
+      console.error("Error fetching patients:", err)
+      setError("No se pudo conectar al servidor para cargar los pacientes.")
+      setPacientes([]) 
+    } finally {
+      setLoadingPacientes(false) 
+    }
+  }
+
+  // --- Data Fetching Effect ---
+  useEffect(() => {
     if (!authLoading) {
       fetchData()
     }
-  }, [user, authLoading]) // Re-fetch if user or authLoading changes
+  }, [user, authLoading]) 
 
   // --- Filtering Logic ---
   const filteredPacientes = pacientes.filter((paciente) => {
@@ -137,30 +162,98 @@ export default function PacientesPage() {
   }
 
   const handleAddPatientSubmit = async () => {
-    // TODO: Implement actual API call to add patient
-    console.log("Adding patient (simulated):", newPatient)
+    if (!newPatient.primer_nombre || !newPatient.primer_apellido || !newPatient.tipoDocumentoCodigo || !newPatient.paisCodigo || !newPatient.email || !newPatient.nui) {
+       toast({
+         title: "Campos Requeridos",
+         description: "Por favor, complete todos los campos obligatorios.",
+         variant: "destructive",
+       });
+       return;
+    }
 
-    // Simulate API call feedback
-    toast({
-      title: "Paciente Agregado (Simulado)",
-      description: `El paciente ${newPatient.nombre} ${newPatient.apellido} ha sido agregado (simulación).`,
-      variant: "default", // Use default variant for success simulation
-    })
+    const temporaryPassword = Math.random().toString(36).slice(-8); 
 
-    setIsAddDialogOpen(false) // Close dialog
-    // Reset form
-    setNewPatient({
-      nombre: "",
-      apellido: "",
-      edad: "",
-      genero: "",
-      email: "",
-      telefono: "",
-      direccion: "",
-    })
-    // Optionally re-fetch patients list here if API call was real
-    // fetchData();
-  }
+    const patientDataForApi = {
+      tipoDocumentoCodigo: newPatient.tipoDocumentoCodigo,
+      paisCodigo: newPatient.paisCodigo,
+      nui: newPatient.nui,
+      primer_nombre: newPatient.primer_nombre,
+      segundo_nombre: newPatient.segundo_nombre || null,
+      primer_apellido: newPatient.primer_apellido,
+      segundo_apellido: newPatient.segundo_apellido || null,
+      email: newPatient.email,
+      password: temporaryPassword, 
+      fecha_nacimiento: newPatient.fecha_nacimiento || null, 
+      genero: newPatient.genero || null,
+      telefono_contacto: newPatient.telefono_contacto || null,
+      direccion_residencial: newPatient.direccion_residencial || null,
+      grupo_sanguineo: newPatient.grupo_sanguineo || null, 
+      ocupacion: newPatient.ocupacion || null, 
+      info_seguro_medico: newPatient.info_seguro_medico || null, 
+      contacto_emergencia: newPatient.contacto_emergencia || null, 
+      alergias: null, 
+      antecedentes_medicos: null, 
+      historial_visitas: null, 
+    };
+
+    setLoadingPacientes(true); 
+    try {
+      const response = await fetch("/api/pacientes/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(patientDataForApi),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: "Paciente Agregado",
+          description: `El paciente ${newPatient.primer_nombre} ${newPatient.primer_apellido} ha sido registrado exitosamente.`,
+          variant: "default",
+        });
+        setIsAddDialogOpen(false); 
+        // Reset form
+        setNewPatient({
+          primer_nombre: "",
+          primer_apellido: "",
+          fecha_nacimiento: "",
+          genero: "",
+          email: "",
+          telefono_contacto: "",
+          direccion_residencial: "",
+          tipoDocumentoCodigo: "",
+          paisCodigo: "",
+          nui: "",
+          segundo_nombre: "",
+          segundo_apellido: "",
+          grupo_sanguineo: "", 
+          ocupacion: "", 
+          info_seguro_medico: "", 
+          contacto_emergencia: "", 
+        });
+        fetchData(); // Re-fetch patients list
+      } else {
+        console.error("API Error:", result.error);
+        toast({
+          title: "Error al agregar paciente",
+          description: result.error || "Ocurrió un error al registrar el paciente.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Fetch Error:", error);
+      toast({
+        title: "Error de conexión",
+        description: "No se pudo conectar con el servidor para registrar el paciente.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingPacientes(false); 
+    }
+  };
 
   // --- Render Loading State ---
   if (authLoading) {
@@ -185,7 +278,6 @@ export default function PacientesPage() {
 
   // --- Main Content Render ---
   return (
-    // Use padding for spacing within the component, let parent handle overall layout
     <div className="p-6 space-y-6 w-full">
       {/* 1. Header Section */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
@@ -210,43 +302,130 @@ export default function PacientesPage() {
               </DialogDescription>
             </DialogHeader>
             {/* Form Grid */}
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid gap-6 py-4">
+              {/* ... (Contenido del formulario sin cambios) ... */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="nombre">
-                    Nombre <span className="text-red-500">*</span>
+                  <Label htmlFor="primer_nombre">
+                    Primer Nombre <span className="text-red-500">*</span>
                   </Label>
                   <Input
-                    id="nombre"
-                    value={newPatient.nombre}
+                    id="primer_nombre"
+                    value={newPatient.primer_nombre}
                     onChange={handleInputChange}
-                    placeholder="Ingrese el nombre"
+                    placeholder="Ingrese el primer nombre"
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="apellido">
-                    Apellido <span className="text-red-500">*</span>
+                    <Label htmlFor="segundo_nombre">Segundo Nombre</Label>
+                    <Input
+                      id="segundo_nombre"
+                      value={newPatient.segundo_nombre}
+                      onChange={handleInputChange}
+                      placeholder="Ingrese el segundo nombre"
+                    />
+                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="primer_apellido">
+                    Primer Apellido <span className="text-red-500">*</span>
                   </Label>
                   <Input
-                    id="apellido"
-                    value={newPatient.apellido}
+                    id="primer_apellido"
+                    value={newPatient.primer_apellido}
                     onChange={handleInputChange}
-                    placeholder="Ingrese el apellido"
+                    placeholder="Ingrese el primer apellido"
                     required
                   />
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                
                 <div className="space-y-2">
-                  <Label htmlFor="edad">Edad</Label>
+                  <Label htmlFor="segundo_apellido">Segundo Apellido</Label>
                   <Input
-                    id="edad"
-                    type="number"
-                    value={newPatient.edad}
+                    id="segundo_apellido"
+                    value={newPatient.segundo_apellido}
                     onChange={handleInputChange}
-                    placeholder="Ej: 30"
+                    placeholder="Ingrese el segundo apellido"
                   />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="tipoDocumentoCodigo">
+                    Tipo Documento <span className="text-red-500">*</span>
+                  </Label>
+                  <Select onValueChange={(value) => setNewPatient((prev) => ({ ...prev, tipoDocumentoCodigo: value }))} value={newPatient.tipoDocumentoCodigo}>
+                    <SelectTrigger id="tipoDocumentoCodigo">
+                      <SelectValue placeholder="Seleccionar tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CC">Cédula de Ciudadanía</SelectItem>
+                      <SelectItem value="CE">Cédula de Extranjería</SelectItem>
+                      <SelectItem value="PS">Pasaporte</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                 <div className="space-y-2">
+                  <Label htmlFor="nui">
+                    NUI <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="nui"
+                    value={newPatient.nui}
+                    onChange={handleInputChange}
+                    placeholder="Ingrese el NUI"
+                    required
+                  />
+                </div>
+              </div>
+               <div className="space-y-2">
+                  <Label htmlFor="paisCodigo">
+                    País <span className="text-red-500">*</span>
+                  </Label>
+                  <Select onValueChange={(value) => setNewPatient((prev) => ({ ...prev, paisCodigo: value }))} value={newPatient.paisCodigo}>
+                    <SelectTrigger id="paisCodigo">
+                      <SelectValue placeholder="Seleccionar país" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="COL">Colombia</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="fecha_nacimiento">Fecha de Nacimiento</Label> 
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !newPatient.fecha_nacimiento && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {newPatient.fecha_nacimiento ? formatDisplayDate(newPatient.fecha_nacimiento) : <span>Seleccionar fecha</span>} 
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={newPatient.fecha_nacimiento ? new Date(newPatient.fecha_nacimiento + 'T00:00:00') : undefined} // Ajuste para evitar problemas de zona horaria al seleccionar
+                        onSelect={(date) => {
+                          setNewPatient((prev) => ({
+                            ...prev,
+                            fecha_nacimiento: date ? format(date, 'yyyy-MM-dd') : "", // Guardar en estado como yyyy-MM-dd
+                          }));
+                        }}
+                        initialFocus
+                        captionLayout="dropdown-buttons" // Permite seleccionar mes y año fácilmente
+                        fromYear={1900} // Rango de años razonable
+                        toYear={new Date().getFullYear()} // Hasta el año actual
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="genero">Género</Label>
@@ -264,43 +443,98 @@ export default function PacientesPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Correo Electrónico</Label>
+                <Label htmlFor="email">
+                  Correo Electrónico <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="email"
                   type="email"
                   value={newPatient.email}
                   onChange={handleInputChange}
                   placeholder="paciente@ejemplo.com"
+                  required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="telefono">Teléfono</Label>
+                <Label htmlFor="telefono_contacto">Teléfono</Label> 
                 <Input
-                  id="telefono"
-                  value={newPatient.telefono}
+                  id="telefono_contacto"
+                  value={newPatient.telefono_contacto}
                   onChange={handleInputChange}
                   placeholder="Ej: 3001234567"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="direccion">Dirección</Label>
+                <Label htmlFor="direccion_residencial">Dirección</Label> 
                 <Input
-                  id="direccion"
-                  value={newPatient.direccion}
+                  id="direccion_residencial"
+                  value={newPatient.direccion_residencial}
                   onChange={handleInputChange}
                   placeholder="Ej: Calle 10 # 20-30"
                 />
               </div>
+               <div className="space-y-2">
+                 <Label htmlFor="grupo_sanguineo">Grupo Sanguíneo</Label> 
+                 <Select onValueChange={(value) => setNewPatient((prev) => ({ ...prev, grupo_sanguineo: value }))} value={newPatient.grupo_sanguineo}>
+                   <SelectTrigger id="grupo_sanguineo">
+                     <SelectValue placeholder="Seleccionar grupo" />
+                   </SelectTrigger>
+                   <SelectContent>
+                     <SelectItem value="A+">A+</SelectItem>
+                     <SelectItem value="A-">A-</SelectItem>
+                     <SelectItem value="B+">B+</SelectItem>
+                     <SelectItem value="B-">B-</SelectItem>
+                     <SelectItem value="AB+">AB+</SelectItem>
+                     <SelectItem value="AB-">AB-</SelectItem>
+                     <SelectItem value="O+">O+</SelectItem>
+                     <SelectItem value="O-">O-</SelectItem>
+                     <SelectItem value="Desconocido">Desconocido</SelectItem>
+                   </SelectContent>
+                 </Select>
+               </div>
+               <div className="space-y-2">
+                 <Label htmlFor="ocupacion">Ocupación</Label> 
+                 <Input
+                   id="ocupacion"
+                   value={newPatient.ocupacion}
+                   onChange={handleInputChange}
+                   placeholder="Ej: Ingeniero"
+                 />
+               </div>
+               <div className="space-y-2">
+                 <Label htmlFor="info_seguro_medico">Información Seguro Médico</Label> 
+                  <Select onValueChange={(value) => setNewPatient((prev) => ({ ...prev, info_seguro_medico: value }))} value={newPatient.info_seguro_medico}>
+                   <SelectTrigger id="info_seguro_medico">
+                     <SelectValue placeholder="Seleccionar seguro" />
+                   </SelectTrigger>
+                   <SelectContent>
+                     <SelectItem value="EPS Sura">EPS Sura</SelectItem>
+                     <SelectItem value="EPS Sanitas">EPS Sanitas</SelectItem>
+                     <SelectItem value="EPS Nueva EPS">EPS Nueva EPS</SelectItem>
+                     <SelectItem value="Medicina Prepagada Colsanitas">Medicina Prepagada Colsanitas</SelectItem>
+                     <SelectItem value="Particular">Particular</SelectItem>
+                     <SelectItem value="Otro">Otro</SelectItem>
+                   </SelectContent>
+                 </Select>
+               </div>
+               <div className="space-y-2">
+                 <Label htmlFor="contacto_emergencia">Contacto de Emergencia</Label> 
+                 <Input
+                   id="contacto_emergencia"
+                   value={newPatient.contacto_emergencia}
+                   onChange={handleInputChange}
+                   placeholder="Nombre y Teléfono"
+                 />
+               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                 Cancelar
               </Button>
-              {/* Disable button if required fields are empty - Basic example */}
               <Button
                 onClick={handleAddPatientSubmit}
                 className="bg-teal-600 hover:bg-teal-700 text-white"
-                disabled={!newPatient.nombre || !newPatient.apellido} // Simple validation example
+                disabled={!newPatient.primer_nombre || !newPatient.primer_apellido || !newPatient.tipoDocumentoCodigo || !newPatient.paisCodigo || !newPatient.email || !newPatient.nui} 
               >
                 Guardar Paciente
               </Button>
@@ -324,13 +558,13 @@ export default function PacientesPage() {
               <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="Buscar por nombre o ID..."
-                className="pl-8 w-full" // Ensure padding for icon
+                className="pl-8 w-full" 
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value)
-                  setCurrentPage(1) // Reset page when searching
+                  setCurrentPage(1) 
                 }}
-                disabled={loadingPacientes} // Disable search while loading
+                disabled={loadingPacientes} 
               />
             </div>
           </div>
@@ -340,7 +574,6 @@ export default function PacientesPage() {
           <Tabs defaultValue="todos" className="space-y-4">
             <TabsList>
               <TabsTrigger value="todos">Todos</TabsTrigger>
-              {/* Add logic later to filter these tabs */}
               <TabsTrigger value="recientes" disabled>
                 Recientes (Próximamente)
               </TabsTrigger>
@@ -363,7 +596,6 @@ export default function PacientesPage() {
               <div className="rounded-md border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
                   {" "}
-                  {/* Make table scrollable on small screens */}
                   <Table>
                     <TableHeader className="bg-gray-50">
                       <TableRow>
@@ -373,15 +605,17 @@ export default function PacientesPage() {
                         <TableHead className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Nombre Completo
                         </TableHead>
+                        {/* --- MODIFICACIÓN: Encabezado Edad -> Fecha Nac. --- */}
                         <TableHead className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Edad
+                          Fecha Nac. 
                         </TableHead>
                         <TableHead className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Género
                         </TableHead>
-                        <TableHead className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {/* --- MODIFICACIÓN: Eliminar Encabezado Fecha Reg. --- */}
+                        {/* <TableHead className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Fecha Reg.
-                        </TableHead>
+                        </TableHead> */}
                         <TableHead className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Último Diag.
                         </TableHead>
@@ -397,7 +631,8 @@ export default function PacientesPage() {
                       {/* Loading State within Table */}
                       {loadingPacientes && (
                         <TableRow>
-                          <TableCell colSpan={8} className="h-32 text-center">
+                          {/* --- MODIFICACIÓN: Ajustar colSpan (de 8 a 7) --- */}
+                          <TableCell colSpan={7} className="h-32 text-center"> 
                             <div className="flex justify-center items-center text-gray-500">
                               <Loader2 className="h-5 w-5 animate-spin mr-2" />
                               Cargando datos...
@@ -408,7 +643,8 @@ export default function PacientesPage() {
                       {/* No Results State */}
                       {!loadingPacientes && !error && paginatedPacientes.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={8} className="h-32 text-center text-gray-500">
+                           {/* --- MODIFICACIÓN: Ajustar colSpan (de 8 a 7) --- */}
+                          <TableCell colSpan={7} className="h-32 text-center text-gray-500">
                             No se encontraron pacientes {searchTerm ? "que coincidan con la búsqueda." : "."}
                           </TableCell>
                         </TableRow>
@@ -422,13 +658,17 @@ export default function PacientesPage() {
                               {paciente.id_usuario}
                             </TableCell>
                             <TableCell className="px-4 py-3 text-gray-700 whitespace-nowrap">{`${paciente.primer_nombre} ${paciente.primer_apellido}`}</TableCell>
-                            <TableCell className="px-4 py-3 text-gray-500">{paciente.edad ?? "N/A"}</TableCell>
+                            {/* --- MODIFICACIÓN: Celda Edad -> Fecha Nac. --- */}
+                            <TableCell className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                              {formatDisplayDate(paciente.fecha_nacimiento)} 
+                            </TableCell>
                             <TableCell className="px-4 py-3 text-gray-500 capitalize">
                               {paciente.genero ?? "N/A"}
                             </TableCell>
-                            <TableCell className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                            {/* --- MODIFICACIÓN: Eliminar Celda Fecha Reg. --- */}
+                            {/* <TableCell className="px-4 py-3 text-gray-500 whitespace-nowrap">
                               {paciente.fecha_registro ?? "N/A"}
-                            </TableCell>
+                            </TableCell> */}
                             <TableCell className="px-4 py-3 text-gray-500">
                               {paciente.ultimo_diagnostico ? (
                                 <span className="text-sm">{paciente.ultimo_diagnostico}</span>
@@ -446,7 +686,6 @@ export default function PacientesPage() {
                             </TableCell>
                             <TableCell className="px-4 py-3 text-right whitespace-nowrap">
                               <div className="flex justify-end items-center space-x-1">
-                                {/* TODO: Add onClick handlers for these buttons */}
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -532,4 +771,3 @@ export default function PacientesPage() {
     </div>
   )
 }
-

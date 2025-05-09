@@ -66,7 +66,7 @@ export async function analyzeImageWithOpenRouter(imageBase64: string): Promise<O
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "google/gemma-3-27b-it:free",
+        model: "qwen/qwen2.5-vl-72b-instruct:free",
         messages: [
           {
             role: "system",
@@ -97,7 +97,7 @@ export async function analyzeImageWithOpenRouter(imageBase64: string): Promise<O
 
     // Verificar si hay error de límite de créditos
     if (!response.ok) {
-      if (data.error?.includes("Rate limit exceeded: free-models-per-day")) {
+      if (typeof data.error === 'string' && data.error.includes("Rate limit exceeded: free-models-per-day")) {
         console.error("🚫 Límite de créditos diarios excedido en OpenRouter API. Necesitas añadir créditos para continuar usando el servicio.");
         throw new Error("Límite de créditos diarios excedido. Por favor, añade créditos a tu cuenta de OpenRouter.");
       }

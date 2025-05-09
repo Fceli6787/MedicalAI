@@ -104,12 +104,40 @@ export default function RegisterPage() {
   };
 
   const goToNextTab = () => {
+    let isValid = true;
+    let errorMessage = "";
+
     if (activeTab === "personal") {
-      setActiveTab("account");
-      setFormProgress(50);
+      if (!formData.tipoDocumentoCodigo || !formData.nui || !formData.primer_nombre || !formData.primer_apellido || !formData.paisCodigo) {
+        isValid = false;
+        errorMessage = "Por favor, complete todos los campos obligatorios en Datos Personales.";
+      }
+      if (isValid) {
+        setActiveTab("account");
+        setFormProgress(50);
+      }
     } else if (activeTab === "account") {
-      setActiveTab("professional");
-      setFormProgress(75);
+      // Validar campos de la pestaña Cuenta
+      if (!formData.email || !formData.password) {
+        isValid = false;
+        errorMessage = "Por favor, complete todos los campos obligatorios en Cuenta.";
+      } else if (!passwordValidation.hasUpperCase || !passwordValidation.hasLowerCase || !passwordValidation.hasNumber || !passwordValidation.hasMinLength) {
+         isValid = false;
+         errorMessage = "La contraseña no cumple con los requisitos de seguridad.";
+      }
+
+      if (isValid) {
+        setActiveTab("professional");
+        setFormProgress(75);
+      }
+    }
+
+    if (!isValid) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Campos incompletos o inválidos',
+        text: errorMessage,
+      });
     }
   };
 
@@ -127,6 +155,18 @@ export default function RegisterPage() {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+
+    // Validar campos obligatorios de la última pestaña antes de enviar
+    if (!formData.id_especialidad || !formData.numero_tarjeta_profesional) {
+       Swal.fire({
+        icon: 'warning',
+        title: 'Campos incompletos',
+        text: 'Por favor, complete todos los campos obligatorios en Información Profesional.',
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       await register({
         ...formData,
