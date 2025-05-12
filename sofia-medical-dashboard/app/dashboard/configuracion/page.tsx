@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
-import { useAuth, User as AuthUser } from "@/context/AuthContext"
+import { useAuth, User as AuthUserInterface } from "@/context/AuthContext" // Renombrado para claridad
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { AlertCircle, Save, User, Lock, Bell, Database, Shield, Zap, Loader2, CheckCircle, KeyRound } from "lucide-react"
@@ -49,12 +49,12 @@ const QrCodeComponent = ({ data }: { data: string | null }) => {
 
   useEffect(() => {
     if (data && qrRef.current) {
-      qrRef.current.innerHTML = '';
+      qrRef.current.innerHTML = ''; // Limpiar QR anterior
       const qrCode = new QRCodeStyling({
         width: 256,
         height: 256,
         data: data,
-        image: '/Logo_sofia.png',
+        image: '/Logo_sofia.png', // Asegúrate que esta imagen exista en tu carpeta public
         dotsOptions: { color: '#0d9488', type: 'rounded' },
         backgroundOptions: { color: '#ffffff' },
         imageOptions: { crossOrigin: 'anonymous', margin: 5, imageSize: 0.3 },
@@ -70,7 +70,7 @@ const QrCodeComponent = ({ data }: { data: string | null }) => {
 };
 
 export default function ConfiguracionPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshUser } = useAuth(); // Obtener refreshUser del contexto
 
   const [userForm, setUserForm] = useState<UserFormState>({
     nombre: "",
@@ -92,12 +92,12 @@ export default function ConfiguracionPage() {
     temaOscuro: false, altaResolucion: true, autoGuardado: true, tiempoAutoGuardado: "5",
   });
 
-  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [usersList, setUsersList] = useState<AuthUserInterface[]>([]); // Usar la interfaz importada
   const [pageError, setPageError] = useState<string | null>(null);
   const [loadingUsers, setLoadingUsers] = useState(true);
 
   // Estados para MFA
-  const [isMfaEnabledForUser, setIsMfaEnabledForUser] = useState<boolean | null>(null);
+  const [isMfaEnabledForUser, setIsMfaEnabledForUser] = useState<boolean>(false);
   const [otpauthUrl, setOtpauthUrl] = useState<string | null>(null);
   const [manualSecret, setManualSecret] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState('');
@@ -109,37 +109,38 @@ export default function ConfiguracionPage() {
   // Efecto para inicializar datos del usuario y estado MFA
   useEffect(() => {
     if (user) {
+      console.log("[ConfiguracionPage] useEffect[user] - User from AuthContext:", user);
       setUserForm(prev => ({
         ...prev,
         nombre: `${user.primer_nombre || ''} ${user.primer_apellido || ''}`.trim(),
         email: user.correo || '',
+        // Aquí podrías inicializar más campos del formulario de perfil si los tienes en el objeto 'user'
       }));
 
-      // TODO: Implementar la lógica para obtener el estado real de MFA del usuario.
-      // Esto podría ser una propiedad en el objeto 'user' de AuthContext (ej. user.mfa_enabled),
-      // o una llamada a un nuevo endpoint API (ej. /api/mfa/status) que devuelva el estado.
-      // Por ahora, asumimos que está deshabilitado si no hay información explícita.
-      // Ejemplo:
-      // const fetchMfaStatus = async () => {
-      //   try {
-      //     const response = await fetch(`/api/mfa/status?firebase_uid=${user.firebase_uid}`);
-      //     const data = await response.json();
-      //     if (response.ok) {
-      //       setIsMfaEnabledForUser(data.mfaEnabled);
-      //     } else {
-      //       console.warn("No se pudo obtener el estado de MFA:", data.error);
-      //       setIsMfaEnabledForUser(false); // Asumir deshabilitado en caso de error
-      //     }
-      //   } catch (err) {
-      //     console.error("Error al obtener estado de MFA:", err);
-      //     setIsMfaEnabledForUser(false); // Asumir deshabilitado
-      //   }
-      // };
-      // fetchMfaStatus();
-      console.log("ConfiguracionPage: TODO - Obtener estado real de MFA para el usuario:", user.firebase_uid);
-      setIsMfaEnabledForUser(false); // Placeholder: Asumir deshabilitado inicialmente
+      // Establecer el estado de MFA basado en user.mfa_enabled del AuthContext
+      console.log("[ConfiguracionPage] useEffect[user] - Setting isMfaEnabledForUser based on user.mfa_enabled:", user.mfa_enabled);
+      const mfaStatusFromContext = !!user.mfa_enabled;
+      setIsMfaEnabledForUser(mfaStatusFromContext);
+                                                  
+      if (mfaStatusFromContext) {
+        // Si MFA ya está habilitado al cargar la página (viene del contexto),
+        // asegurarse de que el flujo de UI esté en el estado inicial.
+        setMfaCurrentStep('initial');
+        setOtpauthUrl(null); // No mostrar QR si ya está habilitado
+        setMfaError(null);
+        // No limpiar mfaSuccessMessage aquí, podría ser útil si acaba de habilitarlo.
+      } else {
+        // Si MFA no está habilitado según el contexto, asegurar estado inicial para habilitación.
+        setMfaCurrentStep('initial');
+        setOtpauthUrl(null);
+      }
+
+    } else {
+      console.log("[ConfiguracionPage] useEffect[user] - No user from AuthContext.");
+      setIsMfaEnabledForUser(false); // Si no hay usuario, MFA no está habilitado
+      setMfaCurrentStep('initial');
     }
-  }, [user]);
+  }, [user]); // Se ejecuta cada vez que el objeto 'user' del AuthContext cambia
 
 
   const handleUserFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,10 +168,13 @@ export default function ConfiguracionPage() {
       if (user?.roles?.includes("admin")) {
         try {
           setLoadingUsers(true);
-          const response = await fetch("/api/dashboard/users");
+          const response = await fetch("/api/dashboard/users"); // Llama sin UID para obtener todos los usuarios
           const data = await response.json();
-          if (response.ok) setUsers(data.users || []); // Asegurar que users sea un array
-          else setPageError(data.error || "Error fetching users");
+          if (response.ok) {
+            setUsersList(data.users || []); // Usar setUsersList
+          } else {
+            setPageError(data.error || "Error fetching users");
+          }
         } catch (err) {
           console.error("Error fetching users:", err);
           setPageError("Error de red al obtener usuarios.");
@@ -178,10 +182,13 @@ export default function ConfiguracionPage() {
           setLoadingUsers(false);
         }
       } else {
-        setLoadingUsers(false);
+        setLoadingUsers(false); // No es admin, no cargar lista de usuarios
       }
     };
-    if (!authLoading) fetchUsers();
+    // Solo llamar si el usuario del contexto ya cargó y es admin
+    if (!authLoading && user) {
+        fetchUsers();
+    }
   }, [user, authLoading]);
 
   const handleInitiateMfaSetup = async () => {
@@ -218,25 +225,61 @@ export default function ConfiguracionPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Error al verificar el código MFA.');
+      
       setMfaSuccessMessage(data.message || "¡Autenticación de Dos Factores habilitada exitosamente!");
-      setIsMfaEnabledForUser(true); setMfaCurrentStep('initial'); setOtpauthUrl(null); setManualSecret(null); setVerificationCode('');
-      // TODO: Actualizar el estado global del usuario en AuthContext (ej. user.mfa_enabled = true)
-    } catch (err: any) { setMfaError(err.message); }
+      setMfaCurrentStep('initial'); 
+      setOtpauthUrl(null); 
+      setManualSecret(null); 
+      setVerificationCode('');
+      
+      console.log("[ConfiguracionPage] MFA verificado exitosamente. Llamando a refreshUser().");
+      await refreshUser(); // Actualizar el estado global del usuario en AuthContext
+      // El useEffect[user] se disparará y actualizará isMfaEnabledForUser
+    } catch (err: any) { 
+      setMfaError(err.message); 
+      console.error("[ConfiguracionPage] Error en handleVerifyAndEnableMfa:", err);
+    }
     finally { setIsMfaLoading(false); }
   };
 
   const handleDisableMfa = async () => {
-    alert("Funcionalidad para deshabilitar MFA pendiente de implementación.");
-    // setIsMfaLoading(true);
-    // try { /* ... llamar a /api/mfa/disable ... */ }
-    // setIsMfaEnabledForUser(false); setMfaSuccessMessage("MFA deshabilitado.");
-    // finally { setIsMfaLoading(false); }
+    // TODO: Implementar la lógica de deshabilitación
+    // Esto requerirá un nuevo endpoint en el backend (ej. /api/mfa/disable)
+    // y actualizar el estado local y global.
+    if (!user?.firebase_uid) {
+      setMfaError("No se pudo obtener la información del usuario.");
+      return;
+    }
+    const confirmDisable = window.confirm("¿Estás seguro de que quieres deshabilitar la Autenticación de Dos Factores? Esta acción reducirá la seguridad de tu cuenta.");
+    if (!confirmDisable) return;
+
+    setIsMfaLoading(true); setMfaError(null); setMfaSuccessMessage(null);
+    try {
+      // Asumiendo que tienes un endpoint /api/mfa/disable
+      const response = await fetch('/api/mfa/disable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firebase_uid: user.firebase_uid }), // Podrías necesitar verificar identidad aquí (ej. contraseña)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Error al deshabilitar MFA.");
+      
+      setMfaSuccessMessage(data.message || "Autenticación de Dos Factores deshabilitada.");
+      await refreshUser(); // Refrescar el contexto, el useEffect actualizará isMfaEnabledForUser
+      setMfaCurrentStep('initial');
+    } catch (err: any) {
+      setMfaError(err.message);
+      console.error("[ConfiguracionPage] Error en handleDisableMfa:", err);
+    } finally {
+      setIsMfaLoading(false);
+    }
   };
 
   if (authLoading) {
     return <div className="flex justify-center items-center h-screen"><Loader2 className="h-10 w-10 animate-spin text-teal-600" /> <p className="ml-3 text-lg">Cargando...</p></div>;
   }
   if (!user) {
+    console.log("[ConfiguracionPage] No hay usuario, renderizando mensaje de inicio de sesión.");
     return <div className="text-center py-10">Por favor, inicia sesión para acceder a la configuración.</div>;
   }
   if (user.roles && user.roles.includes('paciente')) {
@@ -250,6 +293,8 @@ export default function ConfiguracionPage() {
       </div>
     );
   }
+
+  console.log("[ConfiguracionPage] Renderizando UI de MFA. isMfaEnabledForUser:", isMfaEnabledForUser, "user.mfa_enabled del contexto:", user?.mfa_enabled, "mfaCurrentStep:", mfaCurrentStep);
 
   return (
     <div className="w-full py-8 px-6 max-w-full overflow-x-hidden">
@@ -273,7 +318,7 @@ export default function ConfiguracionPage() {
                 <CardDescription>Lista de usuarios registrados en el sistema</CardDescription>
               </CardHeader>
               <CardContent className="pt-4">
-                {users.length > 0 ? (
+                {usersList.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse">
                       <thead>
@@ -284,7 +329,7 @@ export default function ConfiguracionPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {users.map((userItem) => (
+                        {usersList.map((userItem) => (
                           <tr key={userItem.id_usuario} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="py-3 px-3 font-medium text-gray-800">{userItem.primer_nombre} {userItem.primer_apellido}</td>
                             <td className="py-3 px-3 text-gray-600">{userItem.correo}</td>
@@ -450,19 +495,20 @@ export default function ConfiguracionPage() {
                     <Separator className="mb-6" />
 
                     {mfaError && (<Alert variant="destructive" className="mb-4"><AlertCircle className="h-4 w-4" /><AlertTitle>Error de MFA</AlertTitle><AlertDescription>{mfaError}</AlertDescription></Alert>)}
-                    {mfaSuccessMessage && !otpauthUrl && (<Alert variant="default" className="mb-4 bg-green-50 border-green-300 text-green-700"><CheckCircle className="h-4 w-4" /><AlertTitle>Éxito</AlertTitle><AlertDescription>{mfaSuccessMessage}</AlertDescription></Alert>)}
+                    {mfaSuccessMessage && mfaCurrentStep === 'initial' && (<Alert variant="default" className="mb-4 bg-green-50 border-green-300 text-green-700"><CheckCircle className="h-4 w-4" /><AlertTitle>Éxito</AlertTitle><AlertDescription>{mfaSuccessMessage}</AlertDescription></Alert>)}
 
-                    {isMfaEnabledForUser === true && mfaCurrentStep === 'initial' && (
+                    {/* Lógica de renderizado basada en isMfaEnabledForUser y mfaCurrentStep */}
+                    {isMfaEnabledForUser && mfaCurrentStep === 'initial' && (
                       <div className="text-center p-4 border border-green-200 bg-green-50 rounded-md">
                         <CheckCircle className="h-10 w-10 text-green-600 mx-auto mb-2" />
                         <p className="font-semibold text-green-700 mb-3">La Autenticación de Dos Factores está HABILITADA.</p>
                         <Button onClick={handleDisableMfa} variant="outline" className="border-red-500 text-red-500 hover:bg-red-50 hover:text-red-600" disabled={isMfaLoading}>
-                          {isMfaLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Deshabilitar MFA
+                          {isMfaLoading && mfaCurrentStep === 'initial' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Deshabilitar MFA
                         </Button>
                       </div>
                     )}
 
-                    {(isMfaEnabledForUser === false || isMfaEnabledForUser === null) && mfaCurrentStep === 'initial' && (
+                    {!isMfaEnabledForUser && mfaCurrentStep === 'initial' && (
                       <div className="text-left">
                         <p className="text-gray-600 mb-3">MFA no está activo para tu cuenta.</p>
                         <Button onClick={handleInitiateMfaSetup} disabled={isMfaLoading} className="bg-teal-600 hover:bg-teal-700">
@@ -520,7 +566,10 @@ export default function ConfiguracionPage() {
                         <SelectTrigger id="session-timeout" className="border-gray-300 focus:border-teal-500 focus:ring-teal-500"><SelectValue placeholder="Seleccionar tiempo" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="5">5 minutos</SelectItem>
-                          {/* ... más opciones de tiempo ... */}
+                          <SelectItem value="15">15 minutos</SelectItem>
+                          <SelectItem value="30">30 minutos</SelectItem>
+                          <SelectItem value="60">60 minutos</SelectItem>
+                          <SelectItem value="never">Nunca</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -565,7 +614,9 @@ export default function ConfiguracionPage() {
                           <SelectTrigger id="auto-save-time" className="border-gray-300 focus:border-teal-500 focus:ring-teal-500"><SelectValue placeholder="Seleccionar intervalo" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="1">1 minuto</SelectItem>
-                            {/* ... más opciones de tiempo ... */}
+                            <SelectItem value="3">3 minutos</SelectItem>
+                            <SelectItem value="5">5 minutos</SelectItem>
+                            <SelectItem value="10">10 minutos</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -578,9 +629,9 @@ export default function ConfiguracionPage() {
                       <div className="rounded-md border border-gray-200 p-4 bg-gray-50">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3"><Database className="h-5 w-5 text-teal-600" /><span className="font-medium text-gray-800">Espacio Utilizado</span></div>
-                          <span className="font-semibold text-gray-800">1.2 GB / 5 GB</span>
+                          <span className="font-semibold text-gray-800">1.2 GB / 5 GB</span> {/* Ejemplo de datos */}
                         </div>
-                        <div className="mt-3 h-2 w-full rounded-full bg-gray-300"><div className="h-2 w-[24%] rounded-full bg-teal-600"></div></div>
+                        <div className="mt-3 h-2 w-full rounded-full bg-gray-300"><div className="h-2 w-[24%] rounded-full bg-teal-600"></div></div> {/* Ejemplo de barra */}
                       </div>
                     </div>
                   </div>

@@ -578,23 +578,60 @@ export const registerMedico = async (userData: {
   let dbClient: Database | undefined;
   try {
     dbClient = await getConnection();
-    console.log('registerMedico - DB connection obtained.');
-    console.log('registerMedico - Input data:', JSON.stringify(userData, null, 2));
+    console.log('[DB registerMedico] Conexión a DB obtenida.');
+    console.log('[DB registerMedico] Datos de entrada:', JSON.stringify(userData, null, 2));
 
-    const tipoDocumentoResult = await dbClient.sql(`SELECT id_tipo_documento FROM tiposdocumento WHERE UPPER(codigo) = UPPER(?)`, [userData.tipoDocumentoCodigo]);
-    const idTipoDocumento = tipoDocumentoResult?.[0]?.id_tipo_documento;
-    if (!idTipoDocumento) {
+    // --- Obtener id_tipo_documento (Filtrando en JS) ---
+    console.log(`[DB registerMedico] Obteniendo todos los tipos de documento para filtrar por código: ${userData.tipoDocumentoCodigo}`);
+    const todosTiposDocumentoResult = await dbClient.sql(`SELECT id_tipo_documento, codigo FROM tiposdocumento`);
+    
+    console.log('[DB registerMedico] todosTiposDocumentoResult:', JSON.stringify(todosTiposDocumentoResult, null, 2));
+    let idTipoDocumento: number | undefined;
+    let tiposDocumentoArray: any[] = [];
+
+    if (Array.isArray(todosTiposDocumentoResult)) {
+      tiposDocumentoArray = todosTiposDocumentoResult;
+    } else if (todosTiposDocumentoResult && typeof (todosTiposDocumentoResult as any).length === 'number') {
+      tiposDocumentoArray = Array.from(todosTiposDocumentoResult as any);
+    }
+    
+    const foundTipoDoc = tiposDocumentoArray.find(doc => doc.codigo?.toUpperCase() === userData.tipoDocumentoCodigo.toUpperCase());
+    if (foundTipoDoc) {
+      idTipoDocumento = foundTipoDoc.id_tipo_documento;
+    }
+    
+    if (idTipoDocumento === undefined) {
+      console.error(`[DB registerMedico] No se encontró id_tipo_documento para el código: ${userData.tipoDocumentoCodigo} después de filtrar en JS.`);
       throw new Error(`Tipo de documento con código '${userData.tipoDocumentoCodigo}' no encontrado.`);
     }
-    console.log(`registerMedico - idTipoDocumento: ${idTipoDocumento}`);
+    console.log(`[DB registerMedico] idTipoDocumento encontrado (filtrado JS): ${idTipoDocumento}`);
 
-    const paisResult = await dbClient.sql(`SELECT id_pais FROM paises WHERE UPPER(codigo) = UPPER(?)`, [userData.paisCodigo]);
-    const idPais = paisResult?.[0]?.id_pais;
-    if (!idPais) {
+    // --- Obtener id_pais (Filtrando en JS) ---
+    console.log(`[DB registerMedico] Obteniendo todos los países para filtrar por código: ${userData.paisCodigo}`);
+    const todosPaisesResult = await dbClient.sql(`SELECT id_pais, codigo FROM paises`);
+
+    console.log('[DB registerMedico] todosPaisesResult:', JSON.stringify(todosPaisesResult, null, 2));
+    let idPais: number | undefined;
+    let paisesArray: any[] = [];
+
+    if (Array.isArray(todosPaisesResult)) {
+      paisesArray = todosPaisesResult;
+    } else if (todosPaisesResult && typeof (todosPaisesResult as any).length === 'number') {
+      paisesArray = Array.from(todosPaisesResult as any);
+    }
+
+    const foundPais = paisesArray.find(p => p.codigo?.toUpperCase() === userData.paisCodigo.toUpperCase());
+    if (foundPais) {
+      idPais = foundPais.id_pais;
+    }
+
+    if (idPais === undefined) {
+      console.error(`[DB registerMedico] No se encontró idPais para el código: ${userData.paisCodigo} después de filtrar en JS.`);
       throw new Error(`País con código '${userData.paisCodigo}' no encontrado.`);
     }
-    console.log(`registerMedico - idPais: ${idPais}`);
+    console.log(`[DB registerMedico] idPais encontrado (filtrado JS): ${idPais}`);
 
+    // --- Insertar en tabla usuarios ---
     const userInsertParams = [
       idTipoDocumento,
       idPais,
@@ -607,61 +644,100 @@ export const registerMedico = async (userData: {
       userData.firebase_uid,
       'Activo'
     ];
-    console.log('registerMedico - Params for INSERT usuarios:', JSON.stringify(userInsertParams, null, 2));
+    console.log('[DB registerMedico] Parámetros para INSERT en usuarios:', JSON.stringify(userInsertParams, null, 2));
 
     const insertUserResult = await dbClient.sql(
-      `INSERT INTO usuarios (id_tipo_documento, id_pais, nui, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, correo, firebase_uid, estado)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id_usuario`,
+      `INSERT INTO usuarios (id_tipo_documento, id_pais, nui, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, correo, firebase_uid, estado, fecha_registro)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) RETURNING id_usuario`,
       ...userInsertParams
     );
-    console.log('registerMedico - insertUserResult from usuarios:', JSON.stringify(insertUserResult, null, 2));
+    console.log('[DB registerMedico] Resultado de insertUserResult:', JSON.stringify(insertUserResult, null, 2));
 
     let newUserId: number | undefined;
     if (insertUserResult && Array.isArray(insertUserResult) && insertUserResult.length > 0 && insertUserResult[0].id_usuario !== undefined) {
         newUserId = Number(insertUserResult[0].id_usuario);
+    } else if (insertUserResult && typeof (insertUserResult as any).length === 'number' && (insertUserResult as any).length > 0 && (insertUserResult as any)[0]?.id_usuario !== undefined) {
+        newUserId = Number((insertUserResult as any)[0].id_usuario);
     } else if (insertUserResult && (insertUserResult as any).id_usuario !== undefined) {
         newUserId = Number((insertUserResult as any).id_usuario);
     } else {
-        const lastIdResult = await dbClient.sql('SELECT last_insert_rowid() as id');
-        console.log('registerMedico - last_insert_rowid() result for usuarios:', JSON.stringify(lastIdResult, null, 2));
-        const newUserIdValue = lastIdResult?.[0]?.id;
-        if (newUserIdValue !== undefined && newUserIdValue !== null) {
-            newUserId = Number(newUserIdValue);
+        console.warn('[DB registerMedico] RETURNING no devolvió id_usuario como se esperaba. Intentando con last_insert_rowid().');
+        const lastIdResultQuery = await dbClient.sql('SELECT last_insert_rowid() as id');
+        console.log('[DB registerMedico] Resultado de last_insert_rowid():', JSON.stringify(lastIdResultQuery, null, 2));
+        let lastIdValue: any = null;
+        if (Array.isArray(lastIdResultQuery) && lastIdResultQuery.length > 0) {
+            lastIdValue = lastIdResultQuery[0].id;
+        } else if (lastIdResultQuery && typeof (lastIdResultQuery as any).length === 'number' && (lastIdResultQuery as any).length > 0) {
+            lastIdValue = (lastIdResultQuery as any)[0]?.id;
+        }
+        if (lastIdValue !== undefined && lastIdValue !== null) {
+            newUserId = Number(lastIdValue);
         }
     }
 
     if (newUserId === undefined) {
+      console.error('[DB registerMedico] Falló la obtención del newUserId después de la inserción en usuarios.');
       throw new Error('Failed to retrieve new user ID after user insertion in registerMedico.');
     }
-    console.log(`registerMedico - newUserId: ${newUserId}`);
+    console.log(`[DB registerMedico] newUserId obtenido: ${newUserId}`);
 
-    const roleRows = await dbClient.sql(`SELECT id_rol FROM roles WHERE nombre = ?`, ['medico']);
-    const medicoRoleId = roleRows?.[0]?.id_rol;
-    if (!medicoRoleId) {
-      throw new Error('Role \'medico\' not found');
+    // --- Asignar rol de 'medico' ---
+    // Esta función ASIGNA un rol existente, NO CREA nuevos roles en la tabla 'roles'.
+    // La creación de roles base ('admin', 'medico', 'paciente') debe manejarse en la inicialización (init) o por administradores.
+    const medicoRoleName = 'medico';
+    const roleRowsQuery = `SELECT id_rol FROM roles WHERE nombre = ?`;
+    console.log(`[DB registerMedico] Buscando el ID del rol existente con nombre: '${medicoRoleName}'`);
+    const roleRowsResult = await dbClient.sql(roleRowsQuery, [medicoRoleName]);
+    
+    console.log(`[DB registerMedico] Resultado de la búsqueda del rol '${medicoRoleName}':`, JSON.stringify(roleRowsResult));
+    let medicoRoleId: number | undefined;
+    let rolesArray: any[] = [];
+
+    if (Array.isArray(roleRowsResult)) {
+        rolesArray = roleRowsResult;
+    } else if (roleRowsResult && typeof (roleRowsResult as any).length === 'number') {
+        // Manejo para SQLiteCloudRowset u objetos similares a arrays
+        rolesArray = Array.from(roleRowsResult as any);
     }
-    console.log(`registerMedico - medicoRoleId: ${medicoRoleId}`);
 
-    await dbClient.sql(`INSERT INTO usuariosroles (id_usuario, id_rol) VALUES (?, ?)`, ...[newUserId, medicoRoleId]);
-    console.log('registerMedico - Medico role assigned in usuariosroles.');
+    if (rolesArray.length > 0 && rolesArray[0]?.id_rol !== undefined) {
+        medicoRoleId = Number(rolesArray[0].id_rol);
+    }
 
+    if (medicoRoleId === undefined) {
+      console.error(`[DB registerMedico] CRÍTICO: No se encontró el rol '${medicoRoleName}' en la tabla 'roles'. Este rol debe existir para registrar médicos.`);
+      console.error(`[DB registerMedico] Por favor, asegúrese de que la tabla 'roles' contenga una entrada con nombre = '${medicoRoleName}'.`);
+      throw new Error(`El rol '${medicoRoleName}' es necesario para el registro y no fue encontrado. Contacte al administrador.`);
+    }
+    console.log(`[DB registerMedico] ID del rol '${medicoRoleName}' encontrado: ${medicoRoleId}. (Se espera que sea 2 para 'medico' según la configuración inicial).`);
+    
+    // Verificación adicional (opcional, pero buena para la depuración)
+    if (medicoRoleName === 'medico' && medicoRoleId !== 2) {
+        console.warn(`[DB registerMedico] ADVERTENCIA: El rol '${medicoRoleName}' tiene id_rol = ${medicoRoleId}, pero se esperaba id_rol = 2. Verifique la configuración de la tabla 'roles'.`);
+    }
+
+
+    await dbClient.sql(`INSERT INTO usuariosroles (id_usuario, id_rol, fecha_asignacion) VALUES (?, ?, CURRENT_TIMESTAMP)`, newUserId, medicoRoleId);
+    console.log(`[DB registerMedico] Rol '${medicoRoleName}' (ID: ${medicoRoleId}) asignado al usuario ${newUserId} en usuariosroles.`);
+
+    // --- Insertar en tabla medicos ---
     const medicoInsertParams = [
         newUserId,
         userData.id_especialidad,
         userData.numero_tarjeta_profesional,
         userData.años_experiencia || null,
     ];
-    console.log('registerMedico - Params for INSERT medicos:', JSON.stringify(medicoInsertParams, null, 2));
+    console.log('[DB registerMedico] Parámetros para INSERT en medicos:', JSON.stringify(medicoInsertParams, null, 2));
     await dbClient.sql(
       `INSERT INTO medicos (id_usuario, id_especialidad, numero_tarjeta_profesional, fecha_ingreso, años_experiencia)
        VALUES (?, ?, ?, DATE('now'), ?)`,
       ...medicoInsertParams
     );
-    console.log('registerMedico - Medico details inserted into medicos table.');
+    console.log('[DB registerMedico] Detalles del médico insertados en la tabla medicos.');
 
     return newUserId;
   } catch (error: any) {
-    console.error('Error in registerMedico:', error.message, error.stack);
+    console.error('[DB registerMedico] Error en la función registerMedico:', error.message, error.stack);
     throw error;
   }
 };
@@ -1374,3 +1450,93 @@ interface MfaConfig {
         return false;
       }
     }
+
+export interface FullUserFromDB {
+  id_usuario: number;
+  id_tipo_documento: number;
+  id_pais: number;
+  nui: string;
+  primer_nombre: string;
+  segundo_nombre: string | null;
+  primer_apellido: string;
+  segundo_apellido: string | null;
+  correo: string;
+  fecha_registro: string;
+  ultima_actividad: string | null;
+  estado: string;
+  firebase_uid: string;
+  roles: string[]; // Array de nombres de roles
+}
+
+// Función para obtener todos los detalles del usuario y sus roles
+export const getFullUserByFirebaseUID = async (firebaseUid: string): Promise<FullUserFromDB | null> => {
+  let dbClient: Database | undefined;
+  console.log(`[DB getFullUserByFirebaseUID] Buscando usuario completo con firebase_uid: '${firebaseUid}'`);
+  try {
+    dbClient = await getConnection(); // Asume que getConnection() está definida
+
+    const userQuery = `
+      SELECT 
+        u.id_usuario, u.id_tipo_documento, u.id_pais, u.nui, 
+        u.primer_nombre, u.segundo_nombre, u.primer_apellido, u.segundo_apellido, 
+        u.correo, u.fecha_registro, u.ultima_actividad, u.estado, u.firebase_uid
+      FROM usuarios u
+      WHERE u.firebase_uid = ?
+    `;
+    const userResult = await dbClient.sql(userQuery, [firebaseUid]);
+
+    let userData: any = null;
+    if (Array.isArray(userResult) && userResult.length > 0) {
+      userData = userResult[0];
+    } else if (userResult && typeof (userResult as any).length === 'number' && (userResult as any).length > 0) {
+      userData = (userResult as any)[0];
+    }
+
+    if (!userData) {
+      console.warn(`[DB getFullUserByFirebaseUID] No se encontró usuario en tabla 'usuarios' con firebase_uid: ${firebaseUid}`);
+      return null;
+    }
+    console.log(`[DB getFullUserByFirebaseUID] Usuario base encontrado:`, userData);
+
+    // Obtener roles del usuario
+    const rolesQuery = `
+      SELECT r.nombre 
+      FROM roles r 
+      JOIN usuariosroles ur ON r.id_rol = ur.id_rol 
+      WHERE ur.id_usuario = ?
+    `;
+    const rolesResult = await dbClient.sql(rolesQuery, [userData.id_usuario]);
+    
+    let userRoles: string[] = [];
+    if (Array.isArray(rolesResult)) {
+        userRoles = rolesResult.map((row: any) => row.nombre);
+    } else if (rolesResult && typeof (rolesResult as any).length === 'number') {
+        userRoles = Array.from(rolesResult as any).map((row: any) => row.nombre);
+    }
+    console.log(`[DB getFullUserByFirebaseUID] Roles encontrados para usuario ID ${userData.id_usuario}:`, userRoles);
+    
+    // Construir el objeto FullUserFromDB
+    const fullUser: FullUserFromDB = {
+      id_usuario: Number(userData.id_usuario),
+      id_tipo_documento: Number(userData.id_tipo_documento),
+      id_pais: Number(userData.id_pais),
+      nui: String(userData.nui),
+      primer_nombre: String(userData.primer_nombre),
+      segundo_nombre: userData.segundo_nombre ? String(userData.segundo_nombre) : null,
+      primer_apellido: String(userData.primer_apellido),
+      segundo_apellido: userData.segundo_apellido ? String(userData.segundo_apellido) : null,
+      correo: String(userData.correo),
+      fecha_registro: String(userData.fecha_registro),
+      ultima_actividad: userData.ultima_actividad ? String(userData.ultima_actividad) : null,
+      estado: String(userData.estado),
+      firebase_uid: String(userData.firebase_uid),
+      roles: userRoles,
+    };
+    console.log(`[DB getFullUserByFirebaseUID] Usuario completo ensamblado:`, fullUser);
+    return fullUser;
+
+  } catch (error: any) {
+    console.error(`[DB getFullUserByFirebaseUID] Error al obtener usuario completo por Firebase UID (${firebaseUid}):`, error.message, error.stack);
+    return null;
+  }
+};

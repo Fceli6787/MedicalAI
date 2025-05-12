@@ -183,19 +183,15 @@ CREATE TABLE `recomendaciones` (
 );
 
 -- --------------------------------------------------------
-
--- Estructura de tabla para la tabla `resetcodes`
-
-CREATE TABLE `resetcodes` (
-  `id_reset` INTEGER NOT NULL,
-  `id_usuario` INTEGER NOT NULL,
-  `codigo` TEXT NOT NULL,
-  `fecha_expiracion` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `estado` TEXT DEFAULT 'Activo' CHECK (`estado` IN ('Activo', 'Usado', 'Expirado')),
-  PRIMARY KEY (`id_reset`),
-  FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`)
+-- Nueva tabla para la configuración de MFA de los usuarios
+CREATE TABLE usuarios_mfa_config (
+    id_usuario INTEGER NOT NULL PRIMARY KEY, -- Clave primaria y foránea que referencia a usuarios
+    mfa_secret TEXT NOT NULL,                -- El secreto TOTP (debe almacenarse CIFRADO)
+    mfa_enabled INTEGER NOT NULL DEFAULT 0,  -- 0 para false (configuración pendiente o deshabilitado), 1 para true (habilitado y verificado)
+    mfa_verified_at DATETIME DEFAULT NULL,   -- Fecha y hora de cuándo se verificó y habilitó el MFA
+    -- Puedes añadir más campos aquí si es necesario, como la fecha de creación del secreto.
+    FOREIGN KEY (id_usuario) REFERENCES usuarios (id_usuario) ON DELETE CASCADE -- Si se elimina un usuario, se elimina su config MFA
 );
-
 -- --------------------------------------------------------
 
 -- Estructura de tabla para la tabla `roles`
@@ -354,18 +350,9 @@ CREATE TABLE `usuariosroles` (
 
 INSERT INTO `usuariosroles` (`id_usuario`, `id_rol`, `fecha_asignacion`, `estado`) VALUES
 (1, 2, '2025-04-29 14:35:44', 1);
-
--- Nueva tabla para la configuración de MFA de los usuarios
-CREATE TABLE usuarios_mfa_config (
-    id_usuario INTEGER NOT NULL PRIMARY KEY, -- Clave primaria y foránea que referencia a usuarios
-    mfa_secret TEXT NOT NULL,                -- El secreto TOTP (debe almacenarse CIFRADO)
-    mfa_enabled INTEGER NOT NULL DEFAULT 0,  -- 0 para false (configuración pendiente o deshabilitado), 1 para true (habilitado y verificado)
-    mfa_verified_at DATETIME DEFAULT NULL,   -- Fecha y hora de cuándo se verificó y habilitó el MFA
-    -- Puedes añadir más campos aquí si es necesario, como la fecha de creación del secreto.
-    FOREIGN KEY (id_usuario) REFERENCES usuarios (id_usuario) ON DELETE CASCADE -- Si se elimina un usuario, se elimina su config MFA
-);
-
--- (Opcional pero recomendado) Tabla para códigos de recuperación
+-- --------------------------------------------------------
+-- Estructura de tabla para la tabla `usuarios_mfa_config`
+--Tabla para códigos de recuperación
 CREATE TABLE mfa_recovery_codes (
     id_recovery_code INTEGER PRIMARY KEY AUTOINCREMENT,
     id_usuario INTEGER NOT NULL,
