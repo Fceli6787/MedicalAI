@@ -4,7 +4,7 @@ import { createContext, useState, useContext, ReactNode, useEffect } from "react
 import { signOut, getAuth, browserLocalPersistence, setPersistence } from "firebase/auth";
 import { app } from "../lib/firebase";
 import { useRouter } from "next/navigation";
-import Swal from 'sweetalert2'; // Importar SweetAlert2
+import Swal from 'sweetalert2';
 import { toast } from "sonner";
 
 export interface User {
@@ -17,21 +17,22 @@ export interface User {
   primer_apellido: string;
   segundo_apellido: string | null;
   correo: string;
-  fecha_registro: string; // Changed to string for JSON compatibility
-  ultima_actividad: string | null; // Changed to string for JSON compatibility
+  fecha_registro: string;
+  ultima_actividad: string | null;
   estado: string;
   firebase_uid: string;
-  rol: string;
+  rol: string; // Consider if this single 'rol' is still needed if 'roles' array is primary
   roles: string[];
+  mfa_enabled?: boolean; // <--- NUEVO CAMPO PARA ESTADO DE MFA
 }
 
 interface AuthContextProps {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User | null>; // Modificado para devolver User o null
   register: (userData: {
-    tipoDocumentoCodigo: string; // Cambiado a código
-    paisCodigo: string; // Cambiado a código
+    tipoDocumentoCodigo: string;
+    paisCodigo: string;
     nui: string;
     primer_nombre: string;
     segundo_nombre?: string | null;
@@ -42,8 +43,9 @@ interface AuthContextProps {
     id_especialidad: number;
     numero_tarjeta_profesional: string;
     años_experiencia?: number | null;
-  }) => Promise<void>; // Ajustar la interfaz para todos los campos de médico
+  }) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>; // <--- NUEVA FUNCIÓN PARA ACTUALIZAR DATOS DEL USUARIO
 }
 
 export const AuthContext = createContext<AuthContextProps | undefined>(undefined);
@@ -54,66 +56,73 @@ interface AuthProviderProps {
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true); // Inicialmente true mientras se verifica la autenticación
+  const [loading, setLoading] = useState<boolean>(true);
   const router = useRouter();
   const auth = getAuth(app);
 
-  // Configurar persistencia solo si no está ya configurada
   useEffect(() => {
     const configurePersistence = async () => {
       try {
         await setPersistence(auth, browserLocalPersistence);
-        console.log("Firebase persistence configured.");
+        console.log("[AuthContext] Firebase persistence configured to local.");
       } catch (error) {
-        console.error("Error configuring persistence:", error);
+        console.error("[AuthContext] Error configuring persistence:", error);
       }
     };
-
     configurePersistence();
   }, [auth]);
 
-  // Listener para el estado de autenticación de Firebase
-  useEffect(() => {
-    console.log("Setting up Firebase auth state listener.");
-    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-      console.log("Firebase auth state changed. firebaseUser:", firebaseUser ? firebaseUser.uid : null);
-      if (firebaseUser) {
-        // Si hay un usuario autenticado en Firebase, obtener sus datos de la API
-        try {
-          console.log("Fetching user data from API for firebase_uid:", firebaseUser.uid);
-          const response = await fetch(`/api/dashboard/users?firebase_uid=${firebaseUser.uid}`);
-          const data = await response.json();
-          console.log("API response for user data:", data);
-          if (response.ok && data.user) {
-            console.log("User data fetched successfully:", data.user);
-            setUser(data.user);
-          } else {
-            console.warn("User data not found in API or API error. Signing out Firebase.");
-            // Si no se encuentran datos del usuario en la API, cerrar sesión en Firebase
-            await signOut(auth);
-            setUser(null);
-          }
-        } catch (error) {
-          console.error("Error fetching user data:", error);
-          await signOut(auth);
-          setUser(null);
-        }
+  const fetchAndSetUser = async (firebase_uid: string) => {
+    console.log(`[AuthContext] fetchAndSetUser called for firebase_uid: ${firebase_uid}`);
+    try {
+      const response = await fetch(`/api/dashboard/users?firebase_uid=${firebase_uid}`);
+      const data = await response.json();
+      console.log("[AuthContext] API response for user data (/api/dashboard/users):", data);
+      if (response.ok && data.user) {
+        // Asegurarse que el campo mfa_enabled se procese correctamente
+        const userData: User = {
+          ...data.user,
+          mfa_enabled: typeof data.user.mfa_enabled === 'boolean' ? data.user.mfa_enabled : false, // Default a false si no está o es inválido
+        };
+        console.log("[AuthContext] User data (with MFA status) fetched and setting state:", userData);
+        setUser(userData);
+        return userData;
       } else {
-        console.log("No Firebase user found. Setting AuthContext user to null.");
+        console.warn("[AuthContext] User data not found in API or API error. Signing out Firebase.");
+        await signOut(auth); // Importante para limpiar la sesión de Firebase
+        setUser(null);
+        return null;
+      }
+    } catch (error) {
+      console.error("[AuthContext] Error fetching user data in fetchAndSetUser:", error);
+      await signOut(auth);
+      setUser(null);
+      return null;
+    }
+  };
+
+
+  useEffect(() => {
+    console.log("[AuthContext] Setting up Firebase auth state listener.");
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      console.log("[AuthContext] Firebase auth state changed. FirebaseUser UID:", firebaseUser ? firebaseUser.uid : null);
+      if (firebaseUser) {
+        setLoading(true); // Poner loading mientras se obtienen datos de la DB
+        await fetchAndSetUser(firebaseUser.uid);
+      } else {
+        console.log("[AuthContext] No Firebase user found. Setting AuthContext user to null.");
         setUser(null);
       }
-      console.log("AuthContext loading set to false.");
-      setLoading(false); // La verificación inicial ha terminado
+      console.log("[AuthContext] Auth loading state set to false.");
+      setLoading(false);
     });
-
-    // Limpiar el listener al desmontar el componente
     return () => {
-      console.log("Cleaning up Firebase auth state listener.");
+      console.log("[AuthContext] Cleaning up Firebase auth state listener.");
       unsubscribe();
     };
-  }, [auth]); // Dependencia en 'auth'
+  }, [auth]);
 
-  const handleLogin = async (email: string, password: string) => {
+  const handleLogin = async (email: string, password: string): Promise<User | null> => {
     setLoading(true);
     try {
       const response = await fetch('/api/auth/login', {
@@ -121,42 +130,51 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const result = await response.json(); // Cambiado de data a result para mayor claridad
+      const result = await response.json();
 
       if (!response.ok) {
-        // Si la respuesta no es OK, mostrar el mensaje de error de la API con SweetAlert2
         Swal.fire({
-          icon: 'error',
-          title: 'Error de inicio de sesión',
-          text: result.error || 'Login failed',
+          icon: 'error', title: 'Error de inicio de sesión',
+          text: result.error || 'Login failed. Please check your credentials.',
         });
-        // No relanzar el error aquí para evitar que el catch genérico lo maneje también
-        return;
+        setUser(null); // Asegurarse de limpiar el usuario en caso de fallo de API
+        return null;
       }
 
-      // Si la respuesta es OK, proceder con el inicio de sesión exitoso
-      // Asegurarse de que el objeto user tenga la propiedad 'roles' como un array
-      setUser({ ...result.user, roles: result.user.roles || [] });
-      // Mostrar SweetAlert2 para inicio de sesión exitoso
-      Swal.fire({
-        icon: 'success',
-        title: 'Inicio de sesión exitoso',
-        text: `Welcome ${result.user.primer_nombre}`,
-        timer: 2000,
-        timerProgressBar: true,
-        showConfirmButton: false,
-      });
-      router.push("/dashboard");
+      // API devolvió OK, el usuario de Firebase ya está autenticado por el endpoint /api/auth/login
+      // El endpoint /api/auth/login ya devuelve el objeto User completo incluyendo mfa_enabled
+      const loggedInUser: User = {
+        ...result.user,
+        mfa_enabled: typeof result.user.mfa_enabled === 'boolean' ? result.user.mfa_enabled : false,
+      };
+      console.log("[AuthContext] Login successful via API. User data (with MFA status):", loggedInUser);
+      setUser(loggedInUser);
+
+      // No redirigir aquí directamente si MFA está habilitado.
+      // La página de login manejará la redirección o el paso de MFA.
+      return loggedInUser; // Devolver el usuario para que la página de login decida el siguiente paso
+
     } catch (error: any) {
-      console.error("Error logging in:", error);
-      // Mostrar un mensaje genérico con SweetAlert2 para errores no manejados por la API
+      console.error("[AuthContext] Error in handleLogin:", error);
       Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.message || "Something went wrong when logging in",
+        icon: 'error', title: 'Error',
+        text: error.message || "An unexpected error occurred during login.",
       });
+      setUser(null);
+      return null;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshUser = async () => {
+    if (auth.currentUser) {
+      console.log("[AuthContext] Refreshing user data...");
+      setLoading(true);
+      await fetchAndSetUser(auth.currentUser.uid);
+      setLoading(false);
+    } else {
+      console.log("[AuthContext] No current Firebase user to refresh.");
     }
   };
 
@@ -164,29 +182,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       await signOut(auth);
       setUser(null);
-      router.push("/login");
+      console.log("[AuthContext] User logged out. Redirecting to /login.");
+      router.push("/login"); // Asegurar redirección después de limpiar el estado
     } catch (error) {
-      console.error("Error logging out:", error);
+      console.error("[AuthContext] Error logging out:", error);
       toast.error("Something went wrong when logging out");
     }
   };
 
-  const handleRegister = async (
-    userData: {
-      tipoDocumentoCodigo: string; // Cambiado a código
-      paisCodigo: string; // Cambiado a código
-      nui: string;
-      primer_nombre: string;
-      segundo_nombre?: string | null;
-      primer_apellido: string;
-      segundo_apellido?: string | null;
-      email: string;
-      password: string;
-      id_especialidad: number;
-      numero_tarjeta_profesional: string;
-      años_experiencia?: number | null;
-    }
-  ) => {
+  const handleRegister = async (userData: any /* Ajusta el tipo según tu definición */) => {
     setLoading(true);
     try {
       const response = await fetch('/api/auth/register', {
@@ -196,16 +200,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Registration failed');
-      toast.success("User created successfully");
-      router.push("/login"); // Redirigir a login después de un registro exitoso
+      toast.success("User created successfully. Please login.");
+      router.push("/login");
     } catch (error: any) {
-      console.error("Error registering user:", error);
-      // Mostrar error con SweetAlert2
-      Swal.fire({
-        icon: 'error',
-        title: 'Error en el registro',
-        text: error.message || "Something went wrong when creating the user",
-      });
+      console.error("[AuthContext] Error registering user:", error);
+      Swal.fire({ icon: 'error', title: 'Error en el registro', text: error.message });
     } finally {
       setLoading(false);
     }
@@ -217,6 +216,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     login: handleLogin,
     register: handleRegister,
     logout,
+    refreshUser, // Exponer la nueva función
   };
 
   return (

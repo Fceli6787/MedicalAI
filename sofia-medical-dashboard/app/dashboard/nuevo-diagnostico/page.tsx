@@ -114,6 +114,7 @@ export default function NuevoDiagnosticoPage() {
   const handlePatientSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value
     setSearchTerm(term)
+    console.log("[handlePatientSearch] Término de búsqueda:", term);
 
     if (!term || term.trim().length < 2) { 
       setSearchResults([])
@@ -122,35 +123,58 @@ export default function NuevoDiagnosticoPage() {
       setPatientFirstName("");
       setPatientLastName("");
       setPatientNui("");
+      console.log("[handlePatientSearch] Término corto, ocultando resultados.");
       return
     }
     setShowSearchResults(true)
+    console.log("[handlePatientSearch] Estableciendo showSearchResults a true.");
 
     try {
       setSearchLoading(true)
       setSearchError(null)
+      console.log(`[handlePatientSearch] Llamando a API: /api/dashboard/pacientes?search=${encodeURIComponent(term)}`);
       
       const response = await fetch(`/api/dashboard/pacientes?search=${encodeURIComponent(term)}`) 
+      console.log("[handlePatientSearch] Respuesta de API recibida, status:", response.status);
 
       if (!response.ok) {
         let errorMsg = "Error al buscar pacientes";
         try {
-            const errorData = await response.json();
-            errorMsg = errorData.error || errorMsg;
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorMsg;
+          console.error("[handlePatientSearch] ErrorData de API:", errorData);
         } catch (jsonError) {
-            errorMsg = `Error ${response.status}: ${response.statusText}`;
+          errorMsg = `Error ${response.status}: ${response.statusText}`;
         }
         throw new Error(errorMsg);
       }
 
-      const data: SearchedPatient[] = await response.json() 
-      setSearchResults(data)
+      // --- CORRECCIÓN AQUÍ ---
+      const responseData = await response.json(); 
+      console.log("[handlePatientSearch] responseData de API:", responseData); 
+      
+      if (responseData && Array.isArray(responseData.pacientes)) {
+        setSearchResults(responseData.pacientes);
+        console.log("[handlePatientSearch] Pacientes asignados a searchResults:", responseData.pacientes);
+      } else {
+        // Si la estructura es directamente un array (como en algunos casos anteriores)
+        if (Array.isArray(responseData)) {
+            setSearchResults(responseData);
+            console.log("[handlePatientSearch] Pacientes asignados directamente (array) a searchResults:", responseData);
+        } else {
+            console.warn("[handlePatientSearch] La respuesta de la API no tiene el formato esperado (falta .pacientes o no es un array):", responseData);
+            setSearchResults([]); 
+        }
+      }
+      // --- FIN DE CORRECCIÓN ---
+
     } catch (err: any) {
-      console.error("Error en búsqueda de pacientes:", err)
+      console.error("[handlePatientSearch] Catch error:", err);
       setSearchError(err.message || "No se pudieron cargar los resultados.")
-      setSearchResults([])
+      setSearchResults([]);
     } finally {
-      setSearchLoading(false)
+      setSearchLoading(false);
+      console.log("[handlePatientSearch] Finalizando búsqueda.");
     }
   }
 
@@ -167,7 +191,6 @@ export default function NuevoDiagnosticoPage() {
   }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Lógica de handleFileChange... (sin cambios)
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -286,7 +309,6 @@ export default function NuevoDiagnosticoPage() {
   }
 
   const handleAnalyze = async () => {
-    // Lógica de handleAnalyze... (sin cambios)
     if (!imageBase64) {
       setError("No hay imagen cargada para analizar.")
       return
@@ -320,8 +342,7 @@ export default function NuevoDiagnosticoPage() {
   }
 
   const handleDownloadReport = async () => {
-    // Lógica de handleDownloadReport... (sin cambios)
-     if (!diagnosisResult || !pacienteId) {
+      if (!diagnosisResult || !pacienteId) {
         setError("No hay diagnóstico completo o paciente seleccionado para generar el reporte.")
         return
     }
@@ -372,7 +393,7 @@ export default function NuevoDiagnosticoPage() {
     }
     if (!analysisComplete || !diagnosisResult) {
       setError("El análisis de la imagen no se ha completado o no hay resultados.")
-       console.error("[handleSave] Error: Análisis no completo o sin resultados"); 
+        console.error("[handleSave] Error: Análisis no completo o sin resultados"); 
       return
     }
     if (!diagnosisResult.condition && !diagnosisResult.description) { 
@@ -397,7 +418,6 @@ export default function NuevoDiagnosticoPage() {
     console.log("[handleSave] Enviando payload:", JSON.stringify(payload, null, 2))
 
     try {
-      // *** CORRECCIÓN: Cambiar la URL del fetch ***
       console.log("[handleSave] Realizando fetch a /api/diagnosticos...");
       const response = await fetch("/api/diagnosticos", { 
         method: "POST",
@@ -409,13 +429,11 @@ export default function NuevoDiagnosticoPage() {
 
       console.log("[handleSave] Respuesta recibida:", response);
 
-      // Intentar parsear JSON incluso si la respuesta no es OK para obtener el mensaje de error
       const result = await response.json(); 
       console.log("[handleSave] Resultado parseado:", result);
 
       if (!response.ok) {
         console.error("[handleSave] Respuesta no OK:", { status: response.status, statusText: response.statusText, result });
-        // Usar el mensaje de error del resultado si existe, si no, un mensaje genérico
         throw new Error(result.error || `Error del servidor: ${response.status}`) 
       }
 
@@ -445,7 +463,6 @@ export default function NuevoDiagnosticoPage() {
 
     } catch (err: any) {
       console.error("[handleSave] Error en el bloque try/catch:", err);
-      // Manejar el error específico de JSON inválido si la respuesta fue HTML (ej. 404)
       if (err instanceof SyntaxError && err.message.includes("Unexpected token '<'")) {
           setError("Error de comunicación con el servidor (posiblemente ruta no encontrada).");
       } else {
@@ -747,6 +764,9 @@ export default function NuevoDiagnosticoPage() {
                         </div>
                         {searchLoading && <p className="text-xs text-gray-500 mt-1.5">Buscando...</p>}
                         {searchError && <p className="text-xs text-red-500 mt-1.5">{searchError}</p>}
+                        
+                        {/* Desplegable de resultados de búsqueda */}
+                        {console.log("[Render] showSearchResults:", showSearchResults, "searchResults:", searchResults)}
                         {showSearchResults && searchResults.length > 0 && (
                             <div 
                                 ref={searchResultsRef} 

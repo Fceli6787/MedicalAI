@@ -354,3 +354,27 @@ CREATE TABLE `usuariosroles` (
 
 INSERT INTO `usuariosroles` (`id_usuario`, `id_rol`, `fecha_asignacion`, `estado`) VALUES
 (1, 2, '2025-04-29 14:35:44', 1);
+
+-- Nueva tabla para la configuración de MFA de los usuarios
+CREATE TABLE usuarios_mfa_config (
+    id_usuario INTEGER NOT NULL PRIMARY KEY, -- Clave primaria y foránea que referencia a usuarios
+    mfa_secret TEXT NOT NULL,                -- El secreto TOTP (debe almacenarse CIFRADO)
+    mfa_enabled INTEGER NOT NULL DEFAULT 0,  -- 0 para false (configuración pendiente o deshabilitado), 1 para true (habilitado y verificado)
+    mfa_verified_at DATETIME DEFAULT NULL,   -- Fecha y hora de cuándo se verificó y habilitó el MFA
+    -- Puedes añadir más campos aquí si es necesario, como la fecha de creación del secreto.
+    FOREIGN KEY (id_usuario) REFERENCES usuarios (id_usuario) ON DELETE CASCADE -- Si se elimina un usuario, se elimina su config MFA
+);
+
+-- (Opcional pero recomendado) Tabla para códigos de recuperación
+CREATE TABLE mfa_recovery_codes (
+    id_recovery_code INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_usuario INTEGER NOT NULL,
+    code_hash TEXT NOT NULL, -- Almacena el HASH del código de recuperación, no el código en texto plano
+    is_used INTEGER NOT NULL DEFAULT 0, -- 0 para no usado, 1 para usado
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    used_at DATETIME DEFAULT NULL,
+    FOREIGN KEY (id_usuario) REFERENCES usuarios (id_usuario) ON DELETE CASCADE
+);
+
+-- (Opcional) Índice para la búsqueda eficiente de códigos de recuperación por usuario
+CREATE INDEX idx_mfa_recovery_codes_id_usuario ON mfa_recovery_codes (id_usuario);

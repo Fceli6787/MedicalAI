@@ -53,27 +53,50 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ message: 'Médico registrado exitosamente' }, { status: 201 });
   } catch (error: any) {
-    console.error('Error in registration API:', error);
+    console.error('Error general en el API de registro:', error);
+    
+    let errorMessage = 'Error en el registro.';
+    let statusCode = 500;
+
     // Manejo de errores específicos de Firebase Auth
-    if (error.code === 'auth/email-already-in-use') {
-      return NextResponse.json(
-        { error: 'El correo electrónico ya está en uso' },
-        { status: 409 }
-      );
+    if (error.code) {
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          errorMessage = 'El correo electrónico ya está en uso.';
+          statusCode = 409; // Conflict
+          break;
+        case 'auth/weak-password':
+          errorMessage = 'La contraseña es demasiado débil.';
+          statusCode = 400; // Bad Request
+          break;
+        // Puedes añadir más casos de errores de Firebase Auth aquí si es necesario
+        default:
+          errorMessage = `Error de Firebase Auth: ${error.message}`;
+          statusCode = 400; // O 500 dependiendo de la naturaleza del error
+          console.error(`Código de error de Firebase Auth no manejado: ${error.code}`);
+      }
+    } else if (error.message) {
+      // Manejar errores de la base de datos o de la función registerMedico
+      if (error.message.includes('no encontrado')) {
+           errorMessage = error.message; // El mensaje de error de la función db ya es descriptivo
+           statusCode = 400; // Bad Request
+      } else if (error.message.includes('Failed to retrieve new user ID')) {
+           errorMessage = 'Error interno al confirmar el registro del usuario en la base de datos.';
+           statusCode = 500;
+      } else {
+           // Error genérico de registerMedico o de otra parte del try block
+           errorMessage = `Error en el proceso de registro: ${error.message}`;
+           statusCode = 500;
+      }
+    } else {
+        // Error completamente inesperado sin código ni mensaje
+        errorMessage = 'Ocurrió un error inesperado durante el registro.';
+        statusCode = 500;
     }
-    if (error.code === 'auth/weak-password') {
-      return NextResponse.json(
-        { error: 'La contraseña es demasiado débil' },
-        { status: 400 }
-      );
-    }
-    // Manejar errores de la base de datos (ej. tipo de documento o país no encontrado)
-    if (error.message.includes('no encontrado')) {
-         return NextResponse.json(
-            { error: error.message }, // El mensaje de error de la función db ya es descriptivo
-            { status: 400 }
-         );
-    }
-    return NextResponse.json({ error: error.message || 'Registration failed' }, { status: 500 });
+
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: statusCode }
+    );
   }
 }
