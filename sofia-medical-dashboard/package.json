@@ -46,6 +46,7 @@
     "cmdk": "1.0.4",
     "cornerstone-core": "^2.6.1",
     "date-fns": "3.0.0",
+    "dayjs": "^1.11.13",
     "dicom-parser": "^1.8.21",
     "embla-carousel-react": "8.5.1",
     "firebase": "^11.6.1",

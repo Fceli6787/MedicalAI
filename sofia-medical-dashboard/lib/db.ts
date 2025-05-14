@@ -584,7 +584,7 @@ export const registerMedico = async (userData: {
     // --- Obtener id_tipo_documento (Filtrando en JS) ---
     console.log(`[DB registerMedico] Obteniendo todos los tipos de documento para filtrar por código: ${userData.tipoDocumentoCodigo}`);
     const todosTiposDocumentoResult = await dbClient.sql(`SELECT id_tipo_documento, codigo FROM tiposdocumento`);
-    
+
     console.log('[DB registerMedico] todosTiposDocumentoResult:', JSON.stringify(todosTiposDocumentoResult, null, 2));
     let idTipoDocumento: number | undefined;
     let tiposDocumentoArray: any[] = [];
@@ -594,12 +594,12 @@ export const registerMedico = async (userData: {
     } else if (todosTiposDocumentoResult && typeof (todosTiposDocumentoResult as any).length === 'number') {
       tiposDocumentoArray = Array.from(todosTiposDocumentoResult as any);
     }
-    
+
     const foundTipoDoc = tiposDocumentoArray.find(doc => doc.codigo?.toUpperCase() === userData.tipoDocumentoCodigo.toUpperCase());
     if (foundTipoDoc) {
       idTipoDocumento = foundTipoDoc.id_tipo_documento;
     }
-    
+
     if (idTipoDocumento === undefined) {
       console.error(`[DB registerMedico] No se encontró id_tipo_documento para el código: ${userData.tipoDocumentoCodigo} después de filtrar en JS.`);
       throw new Error(`Tipo de documento con código '${userData.tipoDocumentoCodigo}' no encontrado.`);
@@ -656,11 +656,9 @@ export const registerMedico = async (userData: {
     let newUserId: number | undefined;
     if (insertUserResult && Array.isArray(insertUserResult) && insertUserResult.length > 0 && insertUserResult[0].id_usuario !== undefined) {
         newUserId = Number(insertUserResult[0].id_usuario);
-    } else if (insertUserResult && typeof (insertUserResult as any).length === 'number' && (insertUserResult as any).length > 0 && (insertUserResult as any)[0]?.id_usuario !== undefined) {
-        newUserId = Number((insertUserResult as any)[0].id_usuario);
     } else if (insertUserResult && (insertUserResult as any).id_usuario !== undefined) {
         newUserId = Number((insertUserResult as any).id_usuario);
-    } else {
+    } else { // Fallback a last_insert_rowid()
         console.warn('[DB registerMedico] RETURNING no devolvió id_usuario como se esperaba. Intentando con last_insert_rowid().');
         const lastIdResultQuery = await dbClient.sql('SELECT last_insert_rowid() as id');
         console.log('[DB registerMedico] Resultado de last_insert_rowid():', JSON.stringify(lastIdResultQuery, null, 2));
@@ -688,17 +686,41 @@ export const registerMedico = async (userData: {
     const roleRowsQuery = `SELECT id_rol FROM roles WHERE nombre = ?`;
     console.log(`[DB registerMedico] Buscando el ID del rol existente con nombre: '${medicoRoleName}'`);
     const roleRowsResult = await dbClient.sql(roleRowsQuery, [medicoRoleName]);
-    
-    console.log(`[DB registerMedico] Resultado de la búsqueda del rol '${medicoRoleName}':`, JSON.stringify(roleRowsResult));
+
+    console.log(`[DB registerMedico] Resultado de la búsqueda del rol '${medicoRoleName}':`, JSON.stringify(roleRowsResult, null, 2));
     let medicoRoleId: number | undefined;
     let rolesArray: any[] = [];
 
+    // --- INICIO DE LA MODIFICACIÓN (Lógica robusta para extraer rolesArray) ---
     if (Array.isArray(roleRowsResult)) {
         rolesArray = roleRowsResult;
-    } else if (roleRowsResult && typeof (roleRowsResult as any).length === 'number') {
-        // Manejo para SQLiteCloudRowset u objetos similares a arrays
-        rolesArray = Array.from(roleRowsResult as any);
+        console.log(`[DB registerMedico] roleRowsResult es un array. Longitud: ${rolesArray.length}`);
+    } else if (roleRowsResult && typeof roleRowsResult === 'object') {
+        // Si es un objeto, verificar propiedades comunes como 'rows' o '_rows'
+        if (Array.isArray((roleRowsResult as any).rows)) {
+            rolesArray = (roleRowsResult as any).rows;
+            console.log(`[DB registerMedico] Extraído de roleRowsResult.rows. Longitud: ${rolesArray.length}`);
+        } else if (Array.isArray((roleRowsResult as any)._rows)) { // Algunos drivers usan _rows
+            rolesArray = (roleRowsResult as any)._rows;
+            console.log(`[DB registerMedico] Extraído de roleRowsResult._rows. Longitud: ${rolesArray.length}`);
+        } else if (typeof (roleRowsResult as any).length === 'number' && (roleRowsResult as any).length >= 0) {
+            // Si tiene una propiedad 'length' y es un objeto (podría ser un SQLiteCloudRowset u otro objeto similar a un array)
+            console.log(`[DB registerMedico] roleRowsResult tiene 'length': ${(roleRowsResult as any).length}. Intentando Array.from().`);
+            try {
+                rolesArray = Array.from(roleRowsResult as any);
+            } catch (e: any) {
+                console.error(`[DB registerMedico] Falló Array.from(roleRowsResult): ${e.message}. Asumiendo array vacío.`);
+                rolesArray = [];
+            }
+        } else {
+            console.warn(`[DB registerMedico] roleRowsResult es un objeto pero no se pudo extraer un array de roles. Asumiendo array vacío.`);
+            rolesArray = [];
+        }
+    } else {
+        console.warn(`[DB registerMedico] roleRowsResult NO es ni Array ni Objeto (o es null/undefined). Asumiendo array vacío. rawResult:`, roleRowsResult);
+        rolesArray = [];
     }
+    // --- FIN DE LA MODIFICACIÓN ---
 
     if (rolesArray.length > 0 && rolesArray[0]?.id_rol !== undefined) {
         medicoRoleId = Number(rolesArray[0].id_rol);
@@ -709,13 +731,15 @@ export const registerMedico = async (userData: {
       console.error(`[DB registerMedico] Por favor, asegúrese de que la tabla 'roles' contenga una entrada con nombre = '${medicoRoleName}'.`);
       throw new Error(`El rol '${medicoRoleName}' es necesario para el registro y no fue encontrado. Contacte al administrador.`);
     }
-    console.log(`[DB registerMedico] ID del rol '${medicoRoleName}' encontrado: ${medicoRoleId}. (Se espera que sea 2 para 'medico' según la configuración inicial).`);
-    
-    // Verificación adicional (opcional, pero buena para la depuración)
-    if (medicoRoleName === 'medico' && medicoRoleId !== 2) {
-        console.warn(`[DB registerMedico] ADVERTENCIA: El rol '${medicoRoleName}' tiene id_rol = ${medicoRoleId}, pero se esperaba id_rol = 2. Verifique la configuración de la tabla 'roles'.`);
-    }
 
+    // Verificación explícita de que el id_rol para 'medico' sea 2 (o el ID que esperas)
+    const ID_ROL_MEDICO_ESPERADO = 2;
+    if (medicoRoleId !== ID_ROL_MEDICO_ESPERADO) {
+        console.warn(`[DB registerMedico] ADVERTENCIA: El rol '${medicoRoleName}' tiene id_rol = ${medicoRoleId}, pero se esperaba id_rol = ${ID_ROL_MEDICO_ESPERADO}. Verifique la configuración de la tabla 'roles' o ajuste la constante ID_ROL_MEDICO_ESPERADO en el código si el ID esperado es diferente.`);
+        // Si es un requisito estricto que sea 2, puedes lanzar un error aquí:
+        // throw new Error(`El rol 'medico' tiene un ID incorrecto (${medicoRoleId}) en la base de datos. Se esperaba ID ${ID_ROL_MEDICO_ESPERADO}.`);
+    }
+    console.log(`[DB registerMedico] ID del rol '${medicoRoleName}' encontrado y procesado: ${medicoRoleId}.`);
 
     await dbClient.sql(`INSERT INTO usuariosroles (id_usuario, id_rol, fecha_asignacion) VALUES (?, ?, CURRENT_TIMESTAMP)`, newUserId, medicoRoleId);
     console.log(`[DB registerMedico] Rol '${medicoRoleName}' (ID: ${medicoRoleId}) asignado al usuario ${newUserId} en usuariosroles.`);
@@ -890,96 +914,25 @@ export const getUsers = async (): Promise<any[]> => {
   }
 };
 
-export const addUser = async (user: {
-  tipoDocumentoCodigo: string;
-  paisCodigo: string;
-  nui: string;
-  primer_nombre: string;
-  segundo_nombre?: string | null;
-  primer_apellido: string;
-  segundo_apellido?: string | null;
-  correo: string;
-  firebase_uid: string;
-  rol?: string;
-}): Promise<void> => {
-  let dbClient: Database | undefined;
-  try {
-    dbClient = await getConnection();
-    console.log('addUser - Input data:', JSON.stringify(user, null, 2));
-
-    const allTiposDoc = await dbClient.sql('SELECT id_tipo_documento, codigo FROM tiposdocumento');
-    const foundTipoDoc = Array.isArray(allTiposDoc) ? allTiposDoc.find(doc => doc.codigo === user.tipoDocumentoCodigo) : null;
-    const idTipoDocumento = foundTipoDoc?.id_tipo_documento;
-    if (!idTipoDocumento) {
-      throw new Error(`addUser - Tipo de documento con código '${user.tipoDocumentoCodigo}' no encontrado.`);
-    }
-
-    const allPaises = await dbClient.sql('SELECT id_pais, codigo FROM paises');
-    const foundPais = Array.isArray(allPaises) ? allPaises.find(p => p.codigo === user.paisCodigo) : null;
-    const idPais = foundPais?.id_pais;
-    if (!idPais) {
-      throw new Error(`addUser - País con código '${user.paisCodigo}' no encontrado.`);
-    }
-
-    const userInsertParams = [
-      idTipoDocumento,
-      idPais,
-      user.nui,
-      user.primer_nombre,
-      user.segundo_nombre || null,
-      user.primer_apellido,
-      user.segundo_apellido || null,
-      user.correo,
-      user.firebase_uid,
-      'Activo'
-    ];
-    console.log('addUser - Params for INSERT usuarios:', JSON.stringify(userInsertParams, null, 2));
-
-    const insertUserResult = await dbClient.sql(
-      `INSERT INTO usuarios (id_tipo_documento, id_pais, nui, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, correo, firebase_uid, estado)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id_usuario`,
-      ...userInsertParams
-    );
-    console.log('addUser - insertUserResult from usuarios:', JSON.stringify(insertUserResult, null, 2));
-
-    let newUserId: number | undefined;
-    if (insertUserResult && Array.isArray(insertUserResult) && insertUserResult.length > 0 && insertUserResult[0].id_usuario !== undefined) {
-        newUserId = Number(insertUserResult[0].id_usuario);
-    } else if (insertUserResult && (insertUserResult as any).id_usuario !== undefined) {
-        newUserId = Number((insertUserResult as any).id_usuario);
-    } else {
-        const lastIdResult = await dbClient.sql('SELECT last_insert_rowid() as id');
-        const newUserIdValue = lastIdResult?.[0]?.id;
-        if (newUserIdValue !== undefined && newUserIdValue !== null) {
-            newUserId = Number(newUserIdValue);
-        }
-    }
-
-    if (newUserId === undefined) {
-        throw new Error('Failed to retrieve new user ID after user insertion in addUser.');
-    }
-    console.log(`addUser - newUserId: ${newUserId}`);
-
-    const roleNameToSearch = user.rol || 'paciente';
-    const roleRows = await dbClient.sql(`SELECT id_rol FROM roles WHERE nombre = ?`, [roleNameToSearch]);
-    const roleId = roleRows?.[0]?.id_rol;
-
-    if (!roleId) {
-        throw new Error(`Role '${roleNameToSearch}' not found for user ${newUserId}`);
-    }
-
-    await dbClient.sql(`INSERT INTO usuariosroles (id_usuario, id_rol) VALUES (?, ?)`, ...[newUserId, roleId]);
-    console.log(`addUser - Role '${roleNameToSearch}' assigned to user ${newUserId}.`);
-
-  } catch (error: any) {
-    console.error('Error adding user (full):', error.message, error.stack);
-    throw error;
-  }
-};
+// export const addUser = async (user: {
+//   tipoDocumentoCodigo: string;
+//   paisCodigo: string;
+//   nui: string;
+//   primer_nombre: string;
+//   segundo_nombre?: string | null;
+//   primer_apellido: string;
+//   segundo_apellido?: string | null;
+//   correo: string;
+//   firebase_uid: string;
+//   rol?: string;
+// }): Promise<void> => {
+//   // ... contenido de la función ...
+// };
 
 export const getPacientes = async (): Promise<any[]> => {
   try {
     const dbClient = await getConnection();
+    // Nueva consulta SQL que incluye conteo de diagnósticos y el último diagnóstico
     const result = await dbClient.sql(`
       SELECT
         p.id_usuario,
@@ -1002,16 +955,59 @@ export const getPacientes = async (): Promise<any[]> => {
         p.ocupacion,
         p.info_seguro_medico,
         p.contacto_emergencia,
-        p.historial_visitas
+        p.historial_visitas,
+        COUNT(d.id_diagnostico) AS diagnosticosTotales,
+        (
+          SELECT diag.resultado || ' (' || strftime('%d/%m/%Y', diag.fecha_diagnostico) || ')'
+          FROM diagnosticos diag
+          WHERE diag.id_paciente = p.id_usuario
+          ORDER BY diag.fecha_diagnostico DESC, diag.id_diagnostico DESC
+          LIMIT 1
+        ) AS ultimo_diagnostico_info
       FROM pacientes p
       JOIN usuarios u ON p.id_usuario = u.id_usuario
       LEFT JOIN tiposdocumento td ON u.id_tipo_documento = td.id_tipo_documento
       LEFT JOIN paises pa ON u.id_pais = pa.id_pais
+      LEFT JOIN diagnosticos d ON p.id_usuario = d.id_paciente
+      GROUP BY
+        p.id_usuario,
+        u.primer_nombre,
+        u.segundo_nombre,
+        u.primer_apellido,
+        u.segundo_apellido,
+        u.correo,
+        u.fecha_registro,
+        u.nui,
+        td.descripcion,
+        pa.nombre,
+        p.grupo_sanguineo,
+        p.alergias,
+        p.antecedentes_medicos,
+        p.telefono_contacto,
+        p.direccion_residencial,
+        p.fecha_nacimiento,
+        p.genero,
+        p.ocupacion,
+        p.info_seguro_medico,
+        p.contacto_emergencia,
+        p.historial_visitas
+      ORDER BY u.primer_apellido, u.primer_nombre;
     `);
-    return result || [];
+
+    // Mapear el resultado para asegurar que los nombres de campo coincidan
+    // con lo que espera el frontend, especialmente para los nuevos campos.
+    return (result || []).map((row: any) => ({
+      ...row,
+      diagnosticosTotales: Number(row.diagnosticosTotales || 0),
+      // El frontend espera 'ultimo_diagnostico', no 'ultimo_diagnostico_info'
+      ultimo_diagnostico: row.ultimo_diagnostico_info,
+    }));
+
   } catch (error) {
-    console.error('Error getting patients:', error);
-    return [];
+    console.error('Error getting patients with diagnostic info:', error);
+    // Considera devolver un error más específico o lanzar el error
+    // para que sea manejado por la API route.
+    return []; // Devolver array vacío en caso de error para mantener la consistencia
   }
 };
 
@@ -1091,7 +1087,6 @@ export async function searchPacientes(searchTerm: string): Promise<SearchedPatie
 //     return null;
 //   }
 // };
-
 
 export const getUser = async (email: string): Promise<any | null> => {
   try {
@@ -1231,7 +1226,7 @@ export async function getUserByFirebaseUID(firebase_uid: string): Promise<UserFo
     console.error(`[DEBUG getUserByFirebaseUID] ERROR: firebase_uid inválido o vacío: '${firebase_uid}'`);
     return null;
   }
-  
+
   const cleanUid = firebase_uid.trim();
   console.log(`[DEBUG getUserByFirebaseUID] cleanUid a usar en consulta: '${cleanUid}'`);
 
@@ -1245,7 +1240,7 @@ export async function getUserByFirebaseUID(firebase_uid: string): Promise<UserFo
 
     const query = `SELECT id_usuario, correo, firebase_uid FROM usuarios WHERE firebase_uid = ?`;
     const params = [cleanUid];
-    
+
     console.log(`[DEBUG getUserByFirebaseUID] Ejecutando query: "${query}" con params: ${JSON.stringify(params)}`);
 
     // TEST ADICIONAL: Intentar una consulta simple a la tabla usuarios SIN WHERE
@@ -1261,7 +1256,6 @@ export async function getUserByFirebaseUID(firebase_uid: string): Promise<UserFo
         console.error(`[DEBUG getUserByFirebaseUID] ERROR en test query 'SELECT COUNT(*) FROM usuarios': ${testError.message}`);
     }
 
-
     const rawResult = await dbClient.sql(query, ...params); // Usar spread operator para los parámetros
 
     console.log(`[DEBUG getUserByFirebaseUID] rawResult de dbClient.sql('${query}', '${cleanUid}'):`);
@@ -1269,7 +1263,7 @@ export async function getUserByFirebaseUID(firebase_uid: string): Promise<UserFo
     console.log(`    Es Array? ${Array.isArray(rawResult)}`);
     console.log(`    rawResult (directo):`, rawResult); // Loguear el objeto directamente
     console.log(`    rawResult (JSON.stringify): ${JSON.stringify(rawResult, null, 2)}`);
-    
+
     // Si rawResult es un array (como se espera de muchos drivers SQL)
     if (Array.isArray(rawResult)) {
       console.log(`[DEBUG getUserByFirebaseUID] rawResult ES un array. Longitud: ${rawResult.length}`);
@@ -1293,7 +1287,7 @@ export async function getUserByFirebaseUID(firebase_uid: string): Promise<UserFo
         console.error(`[DEBUG getUserByFirebaseUID] ERROR: userRecord del array no tiene las propiedades esperadas (id_usuario, firebase_uid). userRecord:`, JSON.stringify(userRecord, null, 2));
         return null;
       }
-    } 
+    }
     // Si rawResult es un objeto que podría tener una propiedad 'rows' o '_rows' (como algunos drivers)
     // O si el driver de SQLite Cloud devuelve un objeto con 'length' para simular un array (SQLiteCloudRowset)
     else if (rawResult && typeof rawResult === 'object') {
@@ -1311,7 +1305,7 @@ export async function getUserByFirebaseUID(firebase_uid: string): Promise<UserFo
                 console.warn(`[DEBUG getUserByFirebaseUID] Falló Array.from(rawResult): ${e.message}. Probando otras propiedades.`);
             }
         }
-        
+
         if (!userArray && Array.isArray((rawResult as any).rows)) {
             console.log(`[DEBUG getUserByFirebaseUID] Usando rawResult.rows. Longitud: ${(rawResult as any).rows.length}`);
             userArray = (rawResult as any).rows;
@@ -1364,92 +1358,92 @@ export async function getUserByFirebaseUID(firebase_uid: string): Promise<UserFo
     return null;
   }
 }
-    
-    export async function saveOrUpdateUserMfaConfig(id_usuario: number, encryptedSecret: string): Promise<boolean> {
-      let dbClient: Database | undefined;
-      try {
-        dbClient = await getConnection();
-        console.log(`db.ts (saveOrUpdateUserMfaConfig): Guardando secreto MFA para usuario ID: ${id_usuario}`);
-    
-        const result = await dbClient.sql(
-          `INSERT OR REPLACE INTO usuarios_mfa_config (id_usuario, mfa_secret, mfa_enabled, mfa_verified_at)
-           VALUES (?, ?, 0, NULL)`,
-          id_usuario,
-          encryptedSecret
-        );
-    
-        return result.changes > 0;
-      } catch (error: any) {
-        console.error('Error en saveOrUpdateUserMfaConfig:', error.message, error.stack);
-        return false;
-      }
-    }
-    
+
+export async function saveOrUpdateUserMfaConfig(id_usuario: number, encryptedSecret: string): Promise<boolean> {
+  let dbClient: Database | undefined;
+  try {
+    dbClient = await getConnection();
+    console.log(`db.ts (saveOrUpdateUserMfaConfig): Guardando secreto MFA para usuario ID: ${id_usuario}`);
+
+    const result = await dbClient.sql(
+      `INSERT OR REPLACE INTO usuarios_mfa_config (id_usuario, mfa_secret, mfa_enabled, mfa_verified_at)
+       VALUES (?, ?, 0, NULL)`,
+      id_usuario,
+      encryptedSecret
+    );
+
+    return result.changes > 0;
+  } catch (error: any) {
+    console.error('Error en saveOrUpdateUserMfaConfig:', error.message, error.stack);
+    return false;
+  }
+}
+
 interface MfaConfig {
   id_usuario: number;
   mfa_secret: string; // Este es el secreto CIFRADO
   mfa_enabled: number; // 0 o 1
   mfa_verified_at: string | null; // Campo añadido para resolver el error
 }
-    
-    export async function getUserMfaConfig(id_usuario: number): Promise<MfaConfig | null> {
-      let dbClient: Database | undefined;
-      try {
-        dbClient = await getConnection();
-        console.log(`db.ts (getUserMfaConfig): Obteniendo config MFA para usuario ID: ${id_usuario}`);
-    
-        const result = await dbClient.sql(
-          `SELECT id_usuario, mfa_secret, mfa_enabled, mfa_verified_at FROM usuarios_mfa_config WHERE id_usuario = ?`, // Añadido mfa_verified_at
-          id_usuario
-        );
-    
-        // Asumiendo que el driver devuelve un array de objetos
-        if (result && Array.isArray(result) && result.length > 0) {
-          const record = result[0];
-          return {
+
+export async function getUserMfaConfig(id_usuario: number): Promise<MfaConfig | null> {
+  let dbClient: Database | undefined;
+  try {
+    dbClient = await getConnection();
+    console.log(`db.ts (getUserMfaConfig): Obteniendo config MFA para usuario ID: ${id_usuario}`);
+
+    const result = await dbClient.sql(
+      `SELECT id_usuario, mfa_secret, mfa_enabled, mfa_verified_at FROM usuarios_mfa_config WHERE id_usuario = ?`, // Añadido mfa_verified_at
+      id_usuario
+    );
+
+    // Asumiendo que el driver devuelve un array de objetos
+    if (result && Array.isArray(result) && result.length > 0) {
+      const record = result[0];
+      return {
+        id_usuario: Number(record.id_usuario),
+        mfa_secret: String(record.mfa_secret),
+        mfa_enabled: Number(record.mfa_enabled),
+        mfa_verified_at: record.mfa_verified_at ? String(record.mfa_verified_at) : null
+      };
+    } else if (result && typeof result === 'object' && !Array.isArray(result) && (result as any).length > 0) {
+        // Si es un SQLiteCloudRowset u objeto similar a un array
+        const record = (result as any)[0];
+         return {
             id_usuario: Number(record.id_usuario),
             mfa_secret: String(record.mfa_secret),
             mfa_enabled: Number(record.mfa_enabled),
             mfa_verified_at: record.mfa_verified_at ? String(record.mfa_verified_at) : null
-          };
-        } else if (result && typeof result === 'object' && !Array.isArray(result) && (result as any).length > 0) {
-            // Si es un SQLiteCloudRowset u objeto similar a un array
-            const record = (result as any)[0];
-             return {
-                id_usuario: Number(record.id_usuario),
-                mfa_secret: String(record.mfa_secret),
-                mfa_enabled: Number(record.mfa_enabled),
-                mfa_verified_at: record.mfa_verified_at ? String(record.mfa_verified_at) : null
-            };
-        }
-        else {
-          return null;
-        }
-      } catch (error: any) {
-        console.error('Error en getUserMfaConfig:', error.message, error.stack);
-        return null;
-      }
+        };
     }
-    
-    export async function enableUserMfa(id_usuario: number): Promise<boolean> {
-      let dbClient: Database | undefined;
-      try {
-        dbClient = await getConnection();
-        console.log(`db.ts (enableUserMfa): Habilitando MFA para usuario ID: ${id_usuario}`);
-    
-        const result = await dbClient.sql(
-          `UPDATE usuarios_mfa_config
-           SET mfa_enabled = 1, mfa_verified_at = datetime('now')
-           WHERE id_usuario = ?`,
-          id_usuario
-        );
-    
-        return result.changes > 0;
-      } catch (error: any) {
-        console.error('Error en enableUserMfa:', error.message, error.stack);
-        return false;
-      }
+    else {
+      return null;
     }
+  } catch (error: any) {
+    console.error('Error en getUserMfaConfig:', error.message, error.stack);
+    return null;
+  }
+}
+
+export async function enableUserMfa(id_usuario: number): Promise<boolean> {
+  let dbClient: Database | undefined;
+  try {
+    dbClient = await getConnection();
+    console.log(`db.ts (enableUserMfa): Habilitando MFA para usuario ID: ${id_usuario}`);
+
+    const result = await dbClient.sql(
+      `UPDATE usuarios_mfa_config
+       SET mfa_enabled = 1, mfa_verified_at = datetime('now')
+       WHERE id_usuario = ?`,
+      id_usuario
+    );
+
+    return result.changes > 0;
+  } catch (error: any) {
+    console.error('Error en enableUserMfa:', error.message, error.stack);
+    return false;
+  }
+}
 
 export interface FullUserFromDB {
   id_usuario: number;
@@ -1476,9 +1470,9 @@ export const getFullUserByFirebaseUID = async (firebaseUid: string): Promise<Ful
     dbClient = await getConnection(); // Asume que getConnection() está definida
 
     const userQuery = `
-      SELECT 
-        u.id_usuario, u.id_tipo_documento, u.id_pais, u.nui, 
-        u.primer_nombre, u.segundo_nombre, u.primer_apellido, u.segundo_apellido, 
+      SELECT
+        u.id_usuario, u.id_tipo_documento, u.id_pais, u.nui,
+        u.primer_nombre, u.segundo_nombre, u.primer_apellido, u.segundo_apellido,
         u.correo, u.fecha_registro, u.ultima_actividad, u.estado, u.firebase_uid
       FROM usuarios u
       WHERE u.firebase_uid = ?
@@ -1500,13 +1494,13 @@ export const getFullUserByFirebaseUID = async (firebaseUid: string): Promise<Ful
 
     // Obtener roles del usuario
     const rolesQuery = `
-      SELECT r.nombre 
-      FROM roles r 
-      JOIN usuariosroles ur ON r.id_rol = ur.id_rol 
+      SELECT r.nombre
+      FROM roles r
+      JOIN usuariosroles ur ON r.id_rol = ur.id_rol
       WHERE ur.id_usuario = ?
     `;
     const rolesResult = await dbClient.sql(rolesQuery, [userData.id_usuario]);
-    
+
     let userRoles: string[] = [];
     if (Array.isArray(rolesResult)) {
         userRoles = rolesResult.map((row: any) => row.nombre);
@@ -1514,7 +1508,7 @@ export const getFullUserByFirebaseUID = async (firebaseUid: string): Promise<Ful
         userRoles = Array.from(rolesResult as any).map((row: any) => row.nombre);
     }
     console.log(`[DB getFullUserByFirebaseUID] Roles encontrados para usuario ID ${userData.id_usuario}:`, userRoles);
-    
+
     // Construir el objeto FullUserFromDB
     const fullUser: FullUserFromDB = {
       id_usuario: Number(userData.id_usuario),
@@ -1540,3 +1534,239 @@ export const getFullUserByFirebaseUID = async (firebaseUid: string): Promise<Ful
     return null;
   }
 };
+
+// Agrega esta interfaz cerca de tus otras interfaces si es necesario,
+// o asegúrate de que los campos coincidan con lo que PacientesPage.tsx espera.
+export interface PacienteDetalladoParaEdicion {
+  id_usuario: number;
+  primer_nombre: string;
+  segundo_nombre?: string | null;
+  primer_apellido: string;
+  segundo_apellido?: string | null;
+  correo: string; // En el frontend se usa 'email', así que la API route debe mapearlo
+  fecha_registro_usuario?: string; // Opcional, si lo necesitas
+  nui: string;
+  tipo_documento_codigo: string; // Código como 'CC', 'PS'
+  pais_codigo: string; // Código como 'COL'
+  tipo_documento_descripcion?: string; // Opcional
+  pais_nombre?: string; // Opcional
+  grupo_sanguineo?: string | null;
+  alergias?: string | null;
+  antecedentes_medicos?: string | null;
+  telefono_contacto?: string | null;
+  direccion_residencial?: string | null;
+  fecha_nacimiento?: string | null; // Formato YYYY-MM-DD
+  genero?: string | null;
+  ocupacion?: string | null;
+  info_seguro_medico?: string | null;
+  contacto_emergencia?: string | null;
+  // No incluir firebase_uid aquí a menos que sea específicamente necesario para la edición por el admin
+}
+
+export async function getPacienteById(id_usuario: number): Promise<PacienteDetalladoParaEdicion | null> {
+  let dbClient: Database | undefined;
+  try {
+    dbClient = await getConnection();
+    console.log(`[DB getPacienteById] Buscando paciente con ID: ${id_usuario}`);
+
+    const query = `
+      SELECT
+        u.id_usuario,
+        u.primer_nombre,
+        u.segundo_nombre,
+        u.primer_apellido,
+        u.segundo_apellido,
+        u.correo,
+        u.fecha_registro AS fecha_registro_usuario,
+        u.nui,
+        td.codigo AS tipo_documento_codigo,
+        td.descripcion AS tipo_documento_descripcion,
+        pa.codigo AS pais_codigo,
+        pa.nombre AS pais_nombre,
+        p.grupo_sanguineo,
+        p.alergias,
+        p.antecedentes_medicos,
+        p.telefono_contacto,
+        p.direccion_residencial,
+        p.fecha_nacimiento,
+        p.genero,
+        p.ocupacion,
+        p.info_seguro_medico,
+        p.contacto_emergencia,
+        p.historial_visitas
+      FROM usuarios u
+      JOIN pacientes p ON u.id_usuario = p.id_usuario
+      LEFT JOIN tiposdocumento td ON u.id_tipo_documento = td.id_tipo_documento
+      LEFT JOIN paises pa ON u.id_pais = pa.id_pais
+      WHERE u.id_usuario = ?;
+    `;
+
+    const result = await dbClient.sql(query, id_usuario);
+
+    if (result && result.length > 0) {
+      const pacienteData = result[0] as any; // Realiza un cast o mapeo más seguro si es necesario
+      console.log(`[DB getPacienteById] Paciente encontrado:`, pacienteData);
+      // Asegúrate de que los nombres de campo coincidan con la interfaz PacienteDetalladoParaEdicion
+      // y lo que el frontend espera. El frontend espera 'email', la BD tiene 'correo'.
+      // La API route (ApiPacienteIndividual) debe manejar este mapeo si es necesario.
+      return {
+        ...pacienteData,
+        fecha_nacimiento: pacienteData.fecha_nacimiento ? pacienteData.fecha_nacimiento.split('T')[0] : null, // Asegurar formato YYYY-MM-DD
+      } as PacienteDetalladoParaEdicion;
+    } else {
+      console.log(`[DB getPacienteById] Paciente con ID: ${id_usuario} no encontrado.`);
+      return null;
+    }
+  } catch (error: any) {
+    console.error(`[DB getPacienteById] Error obteniendo paciente con ID ${id_usuario}:`, error.message, error.stack);
+    throw error; // Relanzar para que la API route lo maneje
+  }
+}
+
+// Interfaz para los datos que vienen del frontend para actualizar.
+// Coincide con la interfaz PacienteData en ApiPacienteIndividual.
+interface UpdatePacienteData {
+  primer_nombre?: string;
+  segundo_nombre?: string | null;
+  primer_apellido?: string;
+  segundo_apellido?: string | null;
+  fecha_nacimiento?: string | null; // Espera YYYY-MM-DD
+  genero?: string | null;
+  email?: string; // El frontend usa 'email'
+  telefono_contacto?: string | null;
+  direccion_residencial?: string | null;
+  tipoDocumentoCodigo?: string;
+  paisCodigo?: string;
+  nui?: string;
+  grupo_sanguineo?: string | null;
+  ocupacion?: string | null;
+  info_seguro_medico?: string | null;
+  contacto_emergencia?: string | null;
+}
+
+export async function updatePaciente(id_usuario: number, data: UpdatePacienteData): Promise<PacienteDetalladoParaEdicion | null> {
+  let dbClient: Database | undefined;
+  try {
+    dbClient = await getConnection();
+    console.log(`[DB updatePaciente] Actualizando paciente ID: ${id_usuario} con datos:`, data);
+
+    // 1. Obtener IDs para tipoDocumentoCodigo y paisCodigo (filtrando en JS, como en tus funciones de registro)
+    let idTipoDocumento: number | undefined;
+    if (data.tipoDocumentoCodigo) {
+      const todosTiposDoc = await dbClient.sql('SELECT id_tipo_documento, codigo FROM tiposdocumento');
+      const foundTipoDoc = Array.isArray(todosTiposDoc) ? todosTiposDoc.find(doc => doc.codigo === data.tipoDocumentoCodigo) : null;
+      idTipoDocumento = foundTipoDoc?.id_tipo_documento;
+      if (!idTipoDocumento) throw new Error(`Tipo de documento con código '${data.tipoDocumentoCodigo}' no encontrado.`);
+    }
+
+    let idPais: number | undefined;
+    if (data.paisCodigo) {
+      const todosPaises = await dbClient.sql('SELECT id_pais, codigo FROM paises');
+      const foundPais = Array.isArray(todosPaises) ? todosPaises.find(p => p.codigo === data.paisCodigo) : null;
+      idPais = foundPais?.id_pais;
+      if (!idPais) throw new Error(`País con código '${data.paisCodigo}' no encontrado.`);
+    }
+
+    // 2. Actualizar tabla 'usuarios'
+    // Construir dinámicamente la query de actualización para 'usuarios'
+    const userFieldsToUpdate: string[] = [];
+    const userValuesToUpdate: any[] = [];
+
+    if (data.primer_nombre) { userFieldsToUpdate.push("primer_nombre = ?"); userValuesToUpdate.push(data.primer_nombre); }
+    if (data.segundo_nombre !== undefined) { userFieldsToUpdate.push("segundo_nombre = ?"); userValuesToUpdate.push(data.segundo_nombre); } // Permite null
+    if (data.primer_apellido) { userFieldsToUpdate.push("primer_apellido = ?"); userValuesToUpdate.push(data.primer_apellido); }
+    if (data.segundo_apellido !== undefined) { userFieldsToUpdate.push("segundo_apellido = ?"); userValuesToUpdate.push(data.segundo_apellido); } // Permite null
+    if (data.email) { userFieldsToUpdate.push("correo = ?"); userValuesToUpdate.push(data.email); } // BD usa 'correo'
+    if (data.nui) { userFieldsToUpdate.push("nui = ?"); userValuesToUpdate.push(data.nui); }
+    if (idTipoDocumento) { userFieldsToUpdate.push("id_tipo_documento = ?"); userValuesToUpdate.push(idTipoDocumento); }
+    if (idPais) { userFieldsToUpdate.push("id_pais = ?"); userValuesToUpdate.push(idPais); }
+    // Considerar añadir 'ultima_actividad = CURRENT_TIMESTAMP'
+
+    if (userFieldsToUpdate.length > 0) {
+      userValuesToUpdate.push(id_usuario); // Para la cláusula WHERE
+      const updateUserQuery = `UPDATE usuarios SET ${userFieldsToUpdate.join(", ")} WHERE id_usuario = ?`;
+      console.log(`[DB updatePaciente] Ejecutando actualización en usuarios: ${updateUserQuery} con params:`, userValuesToUpdate);
+      await dbClient.sql(updateUserQuery, ...userValuesToUpdate);
+    }
+
+    // 3. Actualizar tabla 'pacientes'
+    // Construir dinámicamente la query de actualización para 'pacientes'
+    const patientFieldsToUpdate: string[] = [];
+    const patientValuesToUpdate: any[] = [];
+
+    if (data.fecha_nacimiento !== undefined) { patientFieldsToUpdate.push("fecha_nacimiento = ?"); patientValuesToUpdate.push(data.fecha_nacimiento); } // Permite null
+    if (data.genero !== undefined) { patientFieldsToUpdate.push("genero = ?"); patientValuesToUpdate.push(data.genero); } // Permite null
+    if (data.telefono_contacto !== undefined) { patientFieldsToUpdate.push("telefono_contacto = ?"); patientValuesToUpdate.push(data.telefono_contacto); }
+    if (data.direccion_residencial !== undefined) { patientFieldsToUpdate.push("direccion_residencial = ?"); patientValuesToUpdate.push(data.direccion_residencial); }
+    if (data.grupo_sanguineo !== undefined) { patientFieldsToUpdate.push("grupo_sanguineo = ?"); patientValuesToUpdate.push(data.grupo_sanguineo); }
+    if (data.ocupacion !== undefined) { patientFieldsToUpdate.push("ocupacion = ?"); patientValuesToUpdate.push(data.ocupacion); }
+    if (data.info_seguro_medico !== undefined) { patientFieldsToUpdate.push("info_seguro_medico = ?"); patientValuesToUpdate.push(data.info_seguro_medico); }
+    if (data.contacto_emergencia !== undefined) { patientFieldsToUpdate.push("contacto_emergencia = ?"); patientValuesToUpdate.push(data.contacto_emergencia); }
+    // Añadir más campos de la tabla 'pacientes' si son editables: alergias, antecedentes_medicos, historial_visitas
+
+    if (patientFieldsToUpdate.length > 0) {
+      patientValuesToUpdate.push(id_usuario); // Para la cláusula WHERE
+      const updatePatientQuery = `UPDATE pacientes SET ${patientFieldsToUpdate.join(", ")} WHERE id_usuario = ?`;
+      console.log(`[DB updatePaciente] Ejecutando actualización en pacientes: ${updatePatientQuery} con params:`, patientValuesToUpdate);
+      await dbClient.sql(updatePatientQuery, ...patientValuesToUpdate);
+    }
+
+    console.log(`[DB updatePaciente] Paciente ID: ${id_usuario} actualizado.`);
+    // Devolver el paciente actualizado llamando a getPacienteById
+    return getPacienteById(id_usuario);
+
+  } catch (error: any) {
+    console.error(`[DB updatePaciente] Error actualizando paciente ID ${id_usuario}:`, error.message, error.stack);
+    throw error; // Relanzar para que la API route lo maneje
+  }
+}
+
+export async function deletePaciente(id_usuario: number): Promise<boolean> {
+  let dbClient: Database | undefined;
+  try {
+    dbClient = await getConnection();
+    console.log(`[DB deletePaciente] Intentando eliminar paciente con ID: ${id_usuario}`);
+
+    // Paso 1: Eliminar de la tabla 'pacientes'
+    // Esto es importante si 'pacientes' tiene FK a 'usuarios' sin ON DELETE CASCADE,
+    // o si quieres asegurarte de que la lógica específica de paciente se ejecute primero.
+    // Si 'pacientes.id_usuario' es solo una extensión y 'usuarios' es la tabla principal
+    // con todas las cascadas, este paso podría ser redundante si la eliminación de 'usuarios' lo cubre.
+    const pacienteDeleteResult = await dbClient.sql(
+      `DELETE FROM pacientes WHERE id_usuario = ?`,
+      id_usuario
+    );
+    console.log(`[DB deletePaciente] Resultado de eliminación en 'pacientes' para ID ${id_usuario}: ${pacienteDeleteResult?.changes ?? 0} filas afectadas.`);
+
+    // Paso 2: Eliminar de la tabla 'usuarios'
+    // Esto debería activar ON DELETE CASCADE para tablas como 'usuariosroles', 'usuarios_mfa_config', 'mfa_recovery_codes'.
+    // Para 'diagnosticos' (donde id_paciente = id_usuario), 'medicos' (si el usuario es médico),
+    // necesitarías ON DELETE CASCADE o eliminarlos manualmente ANTES de este paso si no está configurado.
+    const usuarioDeleteResult = await dbClient.sql(
+      `DELETE FROM usuarios WHERE id_usuario = ?`,
+      id_usuario
+    );
+    console.log(`[DB deletePaciente] Resultado de eliminación en 'usuarios' para ID ${id_usuario}: ${usuarioDeleteResult?.changes ?? 0} filas afectadas.`);
+
+    // Se considera exitoso si se eliminó el registro de la tabla 'usuarios'
+    if (usuarioDeleteResult?.changes !== undefined && usuarioDeleteResult.changes > 0) {
+      console.log(`[DB deletePaciente] Paciente con ID: ${id_usuario} eliminado exitosamente de 'usuarios'.`);
+      return true;
+    } else {
+      // Podría ser que el paciente ya no existiera en 'usuarios' o que solo existiera en 'pacientes' (estado inconsistente)
+      console.warn(`[DB deletePaciente] Paciente con ID: ${id_usuario} no encontrado en 'usuarios' o no se eliminó. Filas afectadas: ${usuarioDeleteResult?.changes ?? 0}.`);
+      // Si la eliminación en 'pacientes' tuvo éxito pero en 'usuarios' no, podrías considerar esto un éxito parcial o un error.
+      // Por ahora, basamos el éxito en la eliminación de 'usuarios'.
+      return false;
+    }
+
+  } catch (error: any) {
+    console.error(`[DB deletePaciente] Error eliminando paciente ID ${id_usuario}:`, error.message, error.stack);
+    // Si el error es por restricción de FK, indica que ON DELETE CASCADE no está funcionando
+    // o no está configurado para todas las tablas dependientes.
+    if (error.message.toLowerCase().includes('foreign key constraint failed')) {
+        console.error(`[DB deletePaciente] FALLO DE RESTRICCIÓN DE CLAVE FORÁNEA: Asegúrate que ON DELETE CASCADE esté configurado para todas las tablas que referencian a 'usuarios.id_usuario' (ej. diagnosticos, medicos, etc.) o elimina los registros dependientes manualmente ANTES de llamar a deletePaciente o dentro de esta función.`);
+    }
+    throw error; // Relanzar para que la API route lo maneje
+  }
+}
