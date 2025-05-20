@@ -1,13 +1,12 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect, useRef } from "react"
-import { useAuth } from "@/context/AuthContext" 
-import { analyzeImageWithOpenRouter } from "@/lib/openrouter" 
-import { generateDiagnosisPDF } from "@/lib/generate-pdf" 
-import { parseDicomFile, applyWindowLevel, type DicomData, type DicomResult } from "@/src/lib/dicomService"; 
-import type { SearchedPatient } from "@/lib/db"; 
+import { useState, useEffect, useRef, useCallback } from "react" 
+import { useAuth } from "@/context/AuthContext"
+import { analyzeImageWithOpenRouter } from "@/lib/openrouter"
+import { generateDiagnosisPDF, type DiagnosisReportData } from "@/lib/generate-pdf" 
+import { parseDicomFile, applyWindowLevel, type DicomData, type DicomResult } from "@/src/lib/dicomService";
+import type { SearchedPatient } from "@/lib/db";
 
 // UI Components
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -30,14 +29,14 @@ import {
   User,
   FileImage,
   Stethoscope,
-  Calendar,
-  FileText, 
+  Calendar, 
+  FileText,
 } from "lucide-react"
 
 // Interface for diagnosis result
 interface DiagnosticoResult {
   condition?: string
-  confidence?: number 
+  confidence?: number
   description?: string
   recomendaciones?: string[]
   pronostico?: {
@@ -58,7 +57,7 @@ export default function NuevoDiagnosticoPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const [searchResults, setSearchResults] = useState<SearchedPatient[]>([]) 
+  const [searchResults, setSearchResults] = useState<SearchedPatient[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
@@ -66,9 +65,9 @@ export default function NuevoDiagnosticoPage() {
 
   const [pacienteId, setPacienteId] = useState<string | null>(null)
   const [tipoExamen, setTipoExamen] = useState<string>("Radiografía")
-  const [confianzaIA, setConfianzaIA] = useState<number | null>(null)
-  const [resultadoIA, setResultadoIA] = useState<string | null>(null)
-  const [region, setRegion] = useState("torax") 
+  const [confianzaIA, setConfianzaIA] = useState<number | null>(null) 
+  const [resultadoIA, setResultadoIA] = useState<string | null>(null) 
+  const [region, setRegion] = useState("torax")
 
   const [originalFileName, setOriginalFileName] = useState<string | null>(null)
   const [processedFileType, setProcessedFileType] = useState<string | null>(null)
@@ -76,13 +75,13 @@ export default function NuevoDiagnosticoPage() {
   const [patientFirstName, setPatientFirstName] = useState("");
   const [patientLastName, setPatientLastName] = useState("");
   const [patientNui, setPatientNui] = useState("");
-  const [examDate, setExamDate] = useState(new Date().toISOString().split("T")[0]); 
-  const [clinicalHistory, setClinicalHistory] = useState(""); 
+  const [examDate, setExamDate] = useState(new Date().toISOString().split("T")[0]);
+  const [clinicalHistory, setClinicalHistory] = useState("");
 
-  const { user } = useAuth() 
-  const imageRef = useRef<HTMLDivElement>(null) 
+  const { user } = useAuth()
+  const imageRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const searchResultsRef = useRef<HTMLDivElement>(null); 
+  const searchResultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (diagnosisResult) {
@@ -95,34 +94,30 @@ export default function NuevoDiagnosticoPage() {
   }, [diagnosisResult])
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) { 
+    function handleClickOutside(event: MouseEvent) {
       if (
-        searchInputRef.current && 
+        searchInputRef.current &&
         !searchInputRef.current.contains(event.target as Node) &&
-        searchResultsRef.current && 
-        !searchResultsRef.current.contains(event.target as Node) 
+        searchResultsRef.current &&
+        !searchResultsRef.current.contains(event.target as Node)
       ) {
         setShowSearchResults(false)
       }
     }
-    document.addEventListener("click", handleClickOutside)
+    document.addEventListener("mousedown", handleClickOutside) 
     return () => {
-      document.removeEventListener("click", handleClickOutside)
+      document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, []) 
+  }, [])
 
   const handlePatientSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value
     setSearchTerm(term)
     console.log("[handlePatientSearch] Término de búsqueda:", term);
 
-    if (!term || term.trim().length < 2) { 
+    if (!term || term.trim().length < 2) {
       setSearchResults([])
       setShowSearchResults(false)
-      setPacienteId(null); 
-      setPatientFirstName("");
-      setPatientLastName("");
-      setPatientNui("");
       console.log("[handlePatientSearch] Término corto, ocultando resultados.");
       return
     }
@@ -134,7 +129,7 @@ export default function NuevoDiagnosticoPage() {
       setSearchError(null)
       console.log(`[handlePatientSearch] Llamando a API: /api/dashboard/pacientes?search=${encodeURIComponent(term)}`);
       
-      const response = await fetch(`/api/dashboard/pacientes?search=${encodeURIComponent(term)}`) 
+      const response = await fetch(`/api/dashboard/pacientes?search=${encodeURIComponent(term)}`)
       console.log("[handlePatientSearch] Respuesta de API recibida, status:", response.status);
 
       if (!response.ok) {
@@ -149,25 +144,21 @@ export default function NuevoDiagnosticoPage() {
         throw new Error(errorMsg);
       }
 
-      // --- CORRECCIÓN AQUÍ ---
-      const responseData = await response.json(); 
-      console.log("[handlePatientSearch] responseData de API:", responseData); 
+      const responseData = await response.json();
+      console.log("[handlePatientSearch] responseData de API:", responseData);
       
       if (responseData && Array.isArray(responseData.pacientes)) {
         setSearchResults(responseData.pacientes);
         console.log("[handlePatientSearch] Pacientes asignados a searchResults:", responseData.pacientes);
       } else {
-        // Si la estructura es directamente un array (como en algunos casos anteriores)
         if (Array.isArray(responseData)) {
             setSearchResults(responseData);
             console.log("[handlePatientSearch] Pacientes asignados directamente (array) a searchResults:", responseData);
         } else {
             console.warn("[handlePatientSearch] La respuesta de la API no tiene el formato esperado (falta .pacientes o no es un array):", responseData);
-            setSearchResults([]); 
+            setSearchResults([]);
         }
       }
-      // --- FIN DE CORRECCIÓN ---
-
     } catch (err: any) {
       console.error("[handlePatientSearch] Catch error:", err);
       setSearchError(err.message || "No se pudieron cargar los resultados.")
@@ -178,16 +169,16 @@ export default function NuevoDiagnosticoPage() {
     }
   }
 
-  const selectPatient = (patient: SearchedPatient) => { 
-    console.log("[selectPatient] Seleccionando paciente:", patient); 
-    setPacienteId(patient.id_usuario.toString()); 
+  const selectPatient = (patient: SearchedPatient) => {
+    console.log("[selectPatient] Seleccionando paciente:", patient);
+    setPacienteId(patient.id_usuario.toString());
     setPatientFirstName(patient.primer_nombre);
-    setPatientLastName(patient.primer_apellido);
-    setPatientNui(patient.nui);
+    setPatientLastName(patient.primer_apellido || ""); 
+    setPatientNui(patient.nui || ""); 
     
-    setSearchTerm(`${patient.primer_nombre} ${patient.primer_apellido} (${patient.nui})`); 
-    setShowSearchResults(false); 
-    setSearchResults([]); 
+    setSearchTerm(`${patient.primer_nombre} ${patient.primer_apellido || ''} (${patient.nui || 'N/A'})`);
+    setShowSearchResults(false);
+    setSearchResults([]);
   }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -199,8 +190,8 @@ export default function NuevoDiagnosticoPage() {
     setError(null)
     setImagePreview(null)
     setImageBase64(null)
-    setOriginalFileName(file.name) 
-    setProcessedFileType(null) 
+    setOriginalFileName(file.name)
+    setProcessedFileType(null)
 
     let currentProgress = 0
     const progressInterval = setInterval(() => {
@@ -219,62 +210,69 @@ export default function NuevoDiagnosticoPage() {
       if (isDicom) {
         try {
           console.log("Procesando archivo DICOM...");
-          const dicomParseResult: DicomResult = await parseDicomFile(file) 
+          const dicomParseResult: DicomResult = await parseDicomFile(file);
           
-          if (!dicomParseResult.success) { 
-            throw new Error(dicomParseResult.error || "Error desconocido al parsear DICOM.");
+          if (dicomParseResult.success === true) {
+            // Success path: dicomParseResult is DicomSuccess
+            if (!dicomParseResult.data) {
+                console.error("Error: DICOM parseado exitosamente pero faltan datos (data).", dicomParseResult);
+                throw new Error("Error interno: Faltan datos en el resultado exitoso del parseo DICOM.");
+            }
+            const dicomData: DicomData = dicomParseResult.data;
+            console.log("DICOM parseado, generando PNG...");
+            
+            const {
+              width,
+              height,
+              pixelData: rawPixelData,
+              windowCenter,
+              windowWidth,
+              slope,
+              intercept,
+            } = dicomData;
+
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) throw new Error("No se pudo crear contexto de canvas");
+
+            const imageData = ctx.createImageData(width, height);
+            
+            applyWindowLevel(
+              imageData.data,
+              rawPixelData, 
+              width,
+              height,
+              windowCenter,
+              windowWidth,
+              slope,
+              intercept
+            );
+
+            ctx.putImageData(imageData, 0, 0);
+            const pngUrl = canvas.toDataURL("image/png", 0.95);
+            const pngBase64 = pngUrl.split(",")[1];
+
+            setImageBase64(pngBase64);
+            setImagePreview(pngUrl);
+            setProcessedFileType("PNG");
+            console.log("PNG generado desde DICOM.");
+          } else {
+            // Failure path: dicomParseResult is DicomError
+            // DicomError has a non-optional 'error: string' property.
+            throw new Error(dicomParseResult.error); 
           }
-          const dicomData: DicomData = dicomParseResult.data; 
-          console.log("DICOM parseado, generando PNG...");
-          
-          const {
-            width,
-            height,
-            pixelData: rawPixelData, 
-            windowCenter,
-            windowWidth,
-            slope,
-            intercept,
-          } = dicomData;
-
-          const canvas = document.createElement("canvas")
-          canvas.width = width
-          canvas.height = height
-          const ctx = canvas.getContext("2d")
-          if (!ctx) throw new Error("No se pudo crear contexto de canvas")
-
-          const imageData = ctx.createImageData(width, height) 
-          
-          applyWindowLevel(
-            imageData.data, 
-            rawPixelData,   
-            width,
-            height,
-            windowCenter,
-            windowWidth,
-            slope,
-            intercept       
-          );
-
-          ctx.putImageData(imageData, 0, 0)
-          const pngUrl = canvas.toDataURL("image/png", 0.95) 
-          const pngBase64 = pngUrl.split(",")[1]
-
-          setImageBase64(pngBase64)
-          setImagePreview(pngUrl)
-          setProcessedFileType("PNG") 
-          console.log("PNG generado desde DICOM.");
-
-        } catch (err: any) {
-          console.error("Error procesando DICOM:", err)
-          setError(`Error al procesar archivo DICOM: ${err.message}. Asegúrese que es un archivo válido y soportado.`)
-          setIsUploading(false)
-          setOriginalFileName(null)
-          clearInterval(progressInterval)
-          setUploadProgress(0)
-          return
+        } catch (err: any) { 
+          console.error("Error procesando DICOM:", err);
+          setError(`Error al procesar archivo DICOM: ${err.message}. Asegúrese que es un archivo válido y soportado.`);
+          setIsUploading(false);
+          setOriginalFileName(null);
+          clearInterval(progressInterval); 
+          setUploadProgress(0);
+          return; 
         }
-      } else if (file.type.startsWith("image/")) { 
+      } else if (file.type.startsWith("image/")) {
         console.log("Procesando archivo de imagen estándar...");
         const previewUrl = URL.createObjectURL(file)
         setImagePreview(previewUrl)
@@ -285,7 +283,7 @@ export default function NuevoDiagnosticoPage() {
           setImageBase64(base64String)
           if (file.type === "image/png") setProcessedFileType("PNG");
           else if (file.type === "image/jpeg") setProcessedFileType("JPG");
-          else setProcessedFileType(file.type.split('/')[1]?.toUpperCase() || "IMG"); 
+          else setProcessedFileType(file.type.split('/')[1]?.toUpperCase() || "IMG");
           console.log("Imagen estándar procesada.");
         }
         reader.readAsDataURL(file)
@@ -293,8 +291,8 @@ export default function NuevoDiagnosticoPage() {
         throw new Error("Formato de archivo no soportado. Use DICOM, PNG o JPG.");
       }
 
-      clearInterval(progressInterval) 
-      setUploadProgress(100) 
+      clearInterval(progressInterval)
+      setUploadProgress(100)
       setIsUploading(false)
 
     } catch (err: any) {
@@ -335,7 +333,7 @@ export default function NuevoDiagnosticoPage() {
     } catch (err: any) {
       setError(`Error al analizar la imagen: ${err.message}. Por favor, intente nuevamente.`)
       console.error("Error en handleAnalyze:", err)
-      setActiveTab("cargar") 
+      setActiveTab("cargar")
     } finally {
       setIsAnalyzing(false)
     }
@@ -347,13 +345,13 @@ export default function NuevoDiagnosticoPage() {
         return
     }
 
-    const reportData = {
+    const reportData: DiagnosisReportData = { 
       patientInfo: {
         id: pacienteId,
         name: `${patientFirstName} ${patientLastName}`.trim(),
         nui: patientNui,
-        examDate: examDate, 
-        clinicalHistory: clinicalHistory, 
+        examDate: examDate,
+        clinicalHistory: clinicalHistory,
       },
       diagnosis: diagnosisResult,
       imageFileName: originalFileName || "imagen_medica",
@@ -361,9 +359,9 @@ export default function NuevoDiagnosticoPage() {
     }
 
     try {
-      setLoading(true) 
+      setLoading(true)
       console.log("Generando PDF con datos:", reportData);
-      const pdf = await generateDiagnosisPDF(reportData, imageRef.current || undefined) 
+      const pdf = await generateDiagnosisPDF(reportData, imageRef.current || undefined)
       pdf.save(`diagnostico_${reportData.patientInfo.name.replace(/\s+/g, '_') || 'paciente'}.pdf`)
       console.log("PDF generado y descarga iniciada.");
     } catch (error) {
@@ -377,28 +375,28 @@ export default function NuevoDiagnosticoPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    console.log("[handleSave] Iniciando proceso de guardado..."); 
+    console.log("[handleSave] Iniciando proceso de guardado...");
 
     console.log("[handleSave] Validando datos:", { pacienteId, userId: user?.id_usuario, analysisComplete, diagnosisResult, resultadoIA });
 
     if (!pacienteId) {
       setError("Por favor, busque y seleccione un paciente.")
-      console.error("[handleSave] Error: Falta pacienteId"); 
+      console.error("[handleSave] Error: Falta pacienteId");
       return
     }
     if (!user?.id_usuario) {
       setError("No se pudo identificar al médico. Por favor, inicie sesión nuevamente.")
-      console.error("[handleSave] Error: Falta user.id_usuario o user es null/undefined", {user}); // Loguear el objeto user
+      console.error("[handleSave] Error: Falta user.id_usuario o user es null/undefined", {user}); 
       return
     }
     if (!analysisComplete || !diagnosisResult) {
       setError("El análisis de la imagen no se ha completado o no hay resultados.")
-        console.error("[handleSave] Error: Análisis no completo o sin resultados"); 
+        console.error("[handleSave] Error: Análisis no completo o sin resultados");
       return
     }
-    if (!diagnosisResult.condition && !diagnosisResult.description) { 
+    if (!diagnosisResult.condition && !diagnosisResult.description) {
         setError("El resultado del análisis de IA (condición o descripción) es obligatorio.")
-        console.error("[handleSave] Error: Falta condition y description en diagnosisResult"); 
+        console.error("[handleSave] Error: Falta condition y description en diagnosisResult");
         return
     }
 
@@ -407,19 +405,19 @@ export default function NuevoDiagnosticoPage() {
 
     const payload = {
       id_paciente: parseInt(pacienteId, 10),
-      id_medico: user.id_usuario, 
+      id_medico: user.id_usuario,
       tipoExamenNombre: tipoExamen,
-      imageBase64: imageBase64, 
-      tipoImagen: processedFileType, 
+      imageBase64: imageBase64,
+      tipoImagen: processedFileType,
       originalFileName: originalFileName,
-      diagnosisAIResult: diagnosisResult, 
+      diagnosisAIResult: diagnosisResult,
     }
 
     console.log("[handleSave] Enviando payload:", JSON.stringify(payload, null, 2))
 
     try {
       console.log("[handleSave] Realizando fetch a /api/diagnosticos...");
-      const response = await fetch("/api/diagnosticos", { 
+      const response = await fetch("/api/diagnosticos", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -429,25 +427,24 @@ export default function NuevoDiagnosticoPage() {
 
       console.log("[handleSave] Respuesta recibida:", response);
 
-      const result = await response.json(); 
+      const result = await response.json();
       console.log("[handleSave] Resultado parseado:", result);
 
       if (!response.ok) {
         console.error("[handleSave] Respuesta no OK:", { status: response.status, statusText: response.statusText, result });
-        throw new Error(result.error || `Error del servidor: ${response.status}`) 
+        throw new Error(result.error || `Error del servidor: ${response.status}`)
       }
 
       console.log("[handleSave] Diagnóstico guardado exitosamente:", result);
-      alert(`Diagnóstico guardado exitosamente con ID: ${result.id_diagnostico}`) 
+      alert(`Diagnóstico guardado exitosamente con ID: ${result.id_diagnostico}`)
       
-      // Limpiar formulario y estados
       setPacienteId(null)
       setSearchTerm("")
       setPatientFirstName("");
       setPatientLastName("");
       setPatientNui("");
-      setExamDate(new Date().toISOString().split("T")[0]); 
-      setClinicalHistory(""); 
+      setExamDate(new Date().toISOString().split("T")[0]);
+      setClinicalHistory("");
       
       setImagePreview(null)
       setImageBase64(null)
@@ -455,8 +452,8 @@ export default function NuevoDiagnosticoPage() {
       setProcessedFileType(null)
       setDiagnosisResult(null)
       setAnalysisComplete(false)
-      setResultadoIA(null)
-      setConfianzaIA(null)
+      setResultadoIA(null) 
+      setConfianzaIA(null) 
       setTipoExamen("Radiografía")
       setRegion("torax")
       setActiveTab("cargar")
@@ -470,25 +467,24 @@ export default function NuevoDiagnosticoPage() {
       }
     } finally {
       console.log("[handleSave] Finalizando setLoading a false.");
-      setLoading(false) 
+      setLoading(false)
     }
   }
 
-  // --- Renderizado del componente JSX ---
   return (
-    <div className="w-full py-8 space-y-8 bg-slate-50 min-h-screen"> 
+    <div className="w-full py-8 space-y-8 bg-slate-50 dark:bg-gray-900 min-h-screen">
       {loading && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-lg shadow-xl flex flex-col items-center space-y-3">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-teal-200 border-t-teal-600"></div>
-            <p className="text-gray-700 font-medium">Procesando...</p>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl flex flex-col items-center space-y-3">
+            <div className="h-12 w-12 animate-spin rounded-full border-4 border-teal-200 dark:border-teal-700 border-t-teal-600 dark:border-t-teal-400"></div>
+            <p className="text-gray-700 dark:text-gray-300 font-medium">Procesando...</p>
           </div>
         </div>
       )}
 
       {error && (
-        <div className="px-4 sm:px-6"> 
-            <Alert variant="destructive" className="mb-6 border-red-500 bg-red-50 text-red-700">
+        <div className="px-4 sm:px-6">
+            <Alert variant="destructive" className="mb-6 border-red-500 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700">
             <AlertCircle className="h-5 w-5" />
             <AlertTitle className="font-semibold">Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
@@ -496,53 +492,54 @@ export default function NuevoDiagnosticoPage() {
         </div>
       )}
 
-      <header className="px-4 sm:px-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-gray-200"> 
+      <header className="px-4 sm:px-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-gray-200 dark:border-gray-700">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-800">Nuevo Diagnóstico Asistido por IA</h1>
-          <p className="text-gray-500 mt-1">Cargue una imagen médica, analícela y guarde el diagnóstico.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-800 dark:text-white">Nuevo Diagnóstico Asistido por IA</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Cargue una imagen médica, analícela y guarde el diagnóstico.</p>
         </div>
         <div className="flex items-center gap-2">
-          <img src="/Logo_sofia.png" alt="Logo SOFIA AI" className="h-10" /> 
-          <span className="text-sm text-gray-600 font-medium">SOFIA AI</span>
+          <img src="/Logo_sofia.png" alt="Logo SOFIA AI" className="h-10" />
+          <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">SOFIA AI</span>
         </div>
       </header>
 
-      <div className="px-4 sm:px-6"> 
+      <div className="px-4 sm:px-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full max-w-lg grid-cols-2 mb-8 bg-gray-100 p-1 rounded-lg shadow-sm">
-            <TabsTrigger value="cargar" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-md rounded-md py-2.5">
+            <TabsList className="grid w-full max-w-lg grid-cols-2 mb-8 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg shadow-sm">
+            <TabsTrigger value="cargar" className="data-[state=active]:bg-teal-600 data-[state=active]:text-white dark:data-[state=active]:text-white data-[state=inactive]:text-gray-600 dark:data-[state=inactive]:text-gray-400 data-[state=active]:shadow-md rounded-md py-2.5">
                 <FileImage className="h-5 w-5 mr-2" />
                 1. Cargar y Configurar
             </TabsTrigger>
             <TabsTrigger
                 value="resultados"
-                disabled={!analysisComplete && !isAnalyzing} 
-                className="data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-md rounded-md py-2.5"
+                disabled={!analysisComplete && !isAnalyzing}
+                className="data-[state=active]:bg-teal-600 data-[state=active]:text-white dark:data-[state=active]:text-white data-[state=inactive]:text-gray-600 dark:data-[state=inactive]:text-gray-400 data-[state=active]:shadow-md rounded-md py-2.5 disabled:dark:text-gray-600"
             >
                 <Stethoscope className="h-5 w-5 mr-2" />
                 2. Resultados y Guardado
             </TabsTrigger>
             </TabsList>
 
-            {/* Pestaña Cargar Imagen */}
-            <TabsContent value="cargar" className="space-y-6"> 
-            <Card className="w-full border-gray-200 shadow-lg rounded-xl overflow-hidden">
-                <CardHeader className="bg-gray-50 border-b border-gray-200 px-6 py-4">
-                <CardTitle className="flex items-center text-xl font-semibold text-teal-700">
-                    <Upload className="h-6 w-6 mr-3 text-teal-600" />
+            <TabsContent value="cargar" className="space-y-6">
+            <Card className="w-full border-gray-200 dark:border-gray-700 shadow-lg dark:bg-gray-800 rounded-xl overflow-hidden">
+                <CardHeader className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 px-6 py-4">
+                <CardTitle className="flex items-center text-xl font-semibold text-teal-700 dark:text-teal-400">
+                    <Upload className="h-6 w-6 mr-3 text-teal-600 dark:text-teal-400" />
                     Cargar Imagen Médica
                 </CardTitle>
-                <CardDescription className="text-gray-500 mt-1">Soporta DICOM (.dcm), PNG, JPG. Tamaño máximo: 10MB.</CardDescription>
+                <CardDescription className="text-gray-500 dark:text-gray-400 mt-1">Soporta DICOM (.dcm), PNG, JPG. Tamaño máximo: 10MB.</CardDescription>
                 </CardHeader>
                 <CardContent className="p-6 space-y-6">
                 <div
                     className={`border-2 border-dashed rounded-lg p-6 sm:p-8 flex flex-col items-center justify-center transition-colors min-h-[250px] ${
-                    isUploading ? "border-teal-400 bg-teal-50" : imagePreview ? "border-gray-300" : "border-gray-300 hover:border-teal-400 bg-gray-50"
+                    isUploading ? "border-teal-400 dark:border-teal-500 bg-teal-50 dark:bg-teal-900/30" 
+                    : imagePreview ? "border-gray-300 dark:border-gray-600" 
+                    : "border-gray-300 dark:border-gray-600 hover:border-teal-400 dark:hover:border-teal-500 bg-gray-50 dark:bg-gray-700/60"
                     }`}
                 >
                     {imagePreview ? (
                     <div className="w-full flex flex-col items-center text-center">
-                        <div className="relative w-full max-h-[280px] sm:max-h-[350px] overflow-hidden rounded-md mb-4 shadow-md border border-gray-200 bg-white">
+                        <div className="relative w-full max-h-[280px] sm:max-h-[350px] overflow-hidden rounded-md mb-4 shadow-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700/30">
                         <img
                             src={imagePreview}
                             alt="Vista previa de la imagen médica"
@@ -550,8 +547,8 @@ export default function NuevoDiagnosticoPage() {
                         />
                         </div>
                         {originalFileName && (
-                            <div className="mb-3 text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-md inline-flex items-center">
-                                <FileText size={16} className="mr-2 text-gray-500"/> {originalFileName}
+                            <div className="mb-3 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-md inline-flex items-center">
+                                <FileText size={16} className="mr-2 text-gray-500 dark:text-gray-400"/> {originalFileName}
                             </div>
                         )}
                         <Button
@@ -559,9 +556,9 @@ export default function NuevoDiagnosticoPage() {
                         size="sm"
                         onClick={() => {
                             setImagePreview(null); setImageBase64(null); setOriginalFileName(null); setProcessedFileType(null);
-                            (document.getElementById("file-upload") as HTMLInputElement).value = ""; 
+                            (document.getElementById("file-upload") as HTMLInputElement).value = "";
                         }}
-                        className="text-red-600 border-red-300 hover:bg-red-50"
+                        className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-600 dark:hover:bg-red-700/50 dark:hover:text-red-300"
                         >
                         Eliminar imagen
                         </Button>
@@ -569,18 +566,18 @@ export default function NuevoDiagnosticoPage() {
                     ) : isUploading ? (
                     <div className="w-full space-y-4 py-6 text-center">
                         <div className="flex justify-center">
-                        <div className="h-12 w-12 animate-spin rounded-full border-4 border-teal-200 border-t-teal-600"></div>
+                        <div className="h-12 w-12 animate-spin rounded-full border-4 border-teal-200 dark:border-teal-700 border-t-teal-600 dark:border-t-teal-400"></div>
                         </div>
-                        <Progress value={uploadProgress} className="w-full h-2.5 rounded-full [&>div]:bg-teal-500" />
-                        <p className="text-sm text-gray-600">
+                        <Progress value={uploadProgress} className="w-full h-2.5 rounded-full [&>div]:bg-teal-500 dark:[&>div]:bg-teal-600 bg-gray-200 dark:bg-gray-700" />
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
                         {uploadProgress < 100 ? `Procesando: ${uploadProgress}%` : "Procesamiento casi listo..."}
                         </p>
                     </div>
                     ) : (
                     <div className="text-center py-8">
-                        <Upload className="mx-auto h-16 w-16 text-teal-400 mb-4" />
-                        <p className="mt-2 text-lg font-medium text-gray-700">Arrastre y suelte su imagen aquí</p>
-                        <p className="mt-1 text-sm text-gray-500">o haga clic para seleccionar un archivo</p>
+                        <Upload className="mx-auto h-16 w-16 text-teal-400 dark:text-teal-500 mb-4" />
+                        <p className="mt-2 text-lg font-medium text-gray-700 dark:text-gray-200">Arrastre y suelte su imagen aquí</p>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">o haga clic para seleccionar un archivo</p>
                         <Input
                         id="file-upload"
                         type="file"
@@ -590,7 +587,7 @@ export default function NuevoDiagnosticoPage() {
                         />
                         <Button
                         variant="outline"
-                        className="mt-6 bg-white border-teal-500 text-teal-600 hover:bg-teal-50 hover:border-teal-600 font-semibold px-6 py-2.5"
+                        className="mt-6 bg-white border-teal-500 text-teal-600 hover:bg-teal-50 hover:border-teal-600 dark:bg-gray-700 dark:border-teal-600 dark:text-teal-400 dark:hover:bg-gray-600 dark:hover:border-teal-500 font-semibold px-6 py-2.5"
                         onClick={() => document.getElementById("file-upload")?.click()}
                         >
                         <Upload className="h-4 w-4 mr-2" />
@@ -602,12 +599,12 @@ export default function NuevoDiagnosticoPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
                     <div className="space-y-1.5">
-                    <Label htmlFor="imageType" className="text-gray-700 font-medium">Tipo de Examen</Label>
+                    <Label htmlFor="imageType" className="text-gray-700 dark:text-gray-300 font-medium">Tipo de Examen</Label>
                     <Select value={tipoExamen} onValueChange={setTipoExamen}>
-                        <SelectTrigger id="imageType" className="border-gray-300 h-11">
+                        <SelectTrigger id="imageType" className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white h-11">
                         <SelectValue placeholder="Seleccionar tipo" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="dark:bg-gray-800 dark:border-gray-700 dark:text-white">
                         <SelectItem value="Radiografía">Radiografía</SelectItem>
                         <SelectItem value="Tomografía">Tomografía Computarizada (TC)</SelectItem>
                         <SelectItem value="Resonancia">Resonancia Magnética (RM)</SelectItem>
@@ -618,12 +615,12 @@ export default function NuevoDiagnosticoPage() {
                     </Select>
                     </div>
                     <div className="space-y-1.5">
-                    <Label htmlFor="anatomicalRegion" className="text-gray-700 font-medium">Región Anatómica Principal</Label> 
+                    <Label htmlFor="anatomicalRegion" className="text-gray-700 dark:text-gray-300 font-medium">Región Anatómica Principal</Label>
                     <Select value={region} onValueChange={setRegion}>
-                        <SelectTrigger id="anatomicalRegion" className="border-gray-300 h-11">
+                        <SelectTrigger id="anatomicalRegion" className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white h-11">
                             <SelectValue placeholder="Seleccionar región"/>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="dark:bg-gray-800 dark:border-gray-700 dark:text-white">
                             <SelectItem value="torax">Tórax</SelectItem>
                             <SelectItem value="abdomen">Abdomen</SelectItem>
                             <SelectItem value="craneo">Cráneo/Cerebro</SelectItem>
@@ -639,11 +636,11 @@ export default function NuevoDiagnosticoPage() {
                     </div>
                 </div>
                 </CardContent>
-                <CardFooter className="bg-gray-50 border-t px-6 py-4">
+                <CardFooter className="bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-600 px-6 py-4">
                 <Button
                     onClick={handleAnalyze}
                     disabled={!imageBase64 || isUploading || isAnalyzing}
-                    className="ml-auto bg-teal-600 hover:bg-teal-700 text-white font-semibold px-6 py-2.5 text-base"
+                    className="ml-auto bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600 font-semibold px-6 py-2.5 text-base"
                 >
                     {isAnalyzing ? (
                         <>
@@ -656,15 +653,14 @@ export default function NuevoDiagnosticoPage() {
             </Card>
             </TabsContent>
 
-            {/* Pestaña Resultados y Guardado */}
-            <TabsContent value="resultados" className="space-y-6"> 
-            <Card className="w-full border-gray-200 shadow-lg rounded-xl overflow-hidden"> 
-                <CardHeader className="bg-gray-50 border-b border-gray-200 px-6 py-4">
-                <CardTitle className="flex items-center text-xl font-semibold text-teal-700">
-                    <Stethoscope className="h-6 w-6 mr-3 text-teal-600" />
+            <TabsContent value="resultados" className="space-y-6">
+            <Card className="w-full border-gray-200 dark:border-gray-700 shadow-lg dark:bg-gray-800 rounded-xl overflow-hidden">
+                <CardHeader className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 px-6 py-4">
+                <CardTitle className="flex items-center text-xl font-semibold text-teal-700 dark:text-teal-400">
+                    <Stethoscope className="h-6 w-6 mr-3 text-teal-600 dark:text-teal-400" />
                     Resultados del Análisis y Registro
                 </CardTitle>
-                <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-500">
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-500 dark:text-gray-400">
                     <span>Diagnóstico asistido por</span>
                     <img src="/Logo_sofia.png" alt="SOFIA AI" className="h-4" />
                 </div>
@@ -672,18 +668,17 @@ export default function NuevoDiagnosticoPage() {
                 <CardContent className="p-6 space-y-8">
                 {isAnalyzing ? (
                     <div className="flex flex-col items-center justify-center space-y-4 py-16 text-center">
-                    <div className="h-16 w-16 animate-spin rounded-full border-4 border-teal-200 border-t-teal-600"></div>
-                    <p className="text-lg font-medium text-gray-700">Analizando imagen médica...</p>
-                    <p className="text-sm text-gray-500 mt-1">Esto puede tomar unos segundos. Por favor, espere.</p>
+                    <div className="h-16 w-16 animate-spin rounded-full border-4 border-teal-200 dark:border-teal-700 border-t-teal-600 dark:border-t-teal-400"></div>
+                    <p className="text-lg font-medium text-gray-700 dark:text-gray-200">Analizando imagen médica...</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Esto puede tomar unos segundos. Por favor, espere.</p>
                     </div>
                 ) : analysisComplete && diagnosisResult ? (
                     <form onSubmit={handleSave} className="space-y-8">
-                    {/* Sección de Resultados de IA y Vista de Imagen */}
                     <div className="grid md:grid-cols-2 gap-6 lg:gap-8 items-start">
                         <div className="space-y-4">
-                            <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 mb-3">Resumen del Análisis IA</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 dark:text-white border-b dark:border-gray-700 pb-2 mb-3">Resumen del Análisis IA</h3>
                             {imagePreview && (
-                                <div className="border border-gray-200 rounded-lg overflow-hidden bg-white p-1 shadow-sm">
+                                <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-700/30 p-1 shadow-sm">
                                     <div ref={imageRef} className="rounded overflow-hidden">
                                     <img
                                         src={imagePreview}
@@ -694,37 +689,36 @@ export default function NuevoDiagnosticoPage() {
                                 </div>
                             )}
                             {originalFileName && (
-                                <p className="text-xs text-gray-500 text-center">Archivo: {originalFileName}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">Archivo: {originalFileName}</p>
                             )}
                         </div>
                         <div className="space-y-4">
-                            <div className="bg-teal-50 p-4 rounded-lg border border-teal-200 shadow-sm">
-                                <h4 className="text-md font-semibold text-teal-800 mb-1.5">Condición Principal Detectada:</h4>
-                                <p className="text-xl font-bold text-teal-700">
+                            <div className="bg-teal-50 dark:bg-teal-900/40 p-4 rounded-lg border border-teal-200 dark:border-teal-700 shadow-sm">
+                                <h4 className="text-md font-semibold text-teal-800 dark:text-teal-200 mb-1.5">Condición Principal Detectada:</h4>
+                                <p className="text-xl font-bold text-teal-700 dark:text-teal-300">
                                     {diagnosisResult.condition || "No especificada"}
                                 </p>
                                 {diagnosisResult.confidence !== undefined && (
-                                    <p className="text-sm text-teal-600 mt-1">
+                                    <p className="text-sm text-teal-600 dark:text-teal-400 mt-1">
                                         Nivel de Confianza IA: <span className="font-semibold">{(diagnosisResult.confidence * 100).toFixed(1)}%</span>
                                     </p>
                                 )}
                             </div>
 
                             {diagnosisResult.description && (
-                                <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                    <h4 className="text-md font-semibold text-gray-700 mb-1.5">Descripción / Hallazgos Adicionales:</h4>
-                                    <p className="text-sm text-gray-600 whitespace-pre-wrap">{diagnosisResult.description}</p>
+                                <div className="bg-white dark:bg-gray-700/60 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                                    <h4 className="text-md font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Descripción / Hallazgos Adicionales:</h4>
+                                    <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{diagnosisResult.description}</p>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    {/* Recomendaciones y Pronóstico */}
                     <div className="grid md:grid-cols-2 gap-6 lg:gap-8">
                         {diagnosisResult.recomendaciones && diagnosisResult.recomendaciones.length > 0 && (
-                            <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                <h4 className="text-md font-semibold text-gray-700 mb-2">Recomendaciones Sugeridas por IA:</h4>
-                                <ul className="space-y-1.5 text-sm list-disc list-inside pl-2 text-gray-600">
+                            <div className="bg-white dark:bg-gray-700/60 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <h4 className="text-md font-semibold text-gray-700 dark:text-gray-200 mb-2">Recomendaciones Sugeridas por IA:</h4>
+                                <ul className="space-y-1.5 text-sm list-disc list-inside pl-2 text-gray-600 dark:text-gray-300">
                                 {diagnosisResult.recomendaciones.map((rec, i) => (
                                     <li key={i}>{rec || "N/A"}</li>
                                 ))}
@@ -732,9 +726,9 @@ export default function NuevoDiagnosticoPage() {
                             </div>
                         )}
                         {diagnosisResult.pronostico && (
-                            <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                <h4 className="text-md font-semibold text-gray-700 mb-2">Pronóstico Estimado por IA:</h4>
-                                <div className="space-y-1 text-sm">
+                            <div className="bg-white dark:bg-gray-700/60 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <h4 className="text-md font-semibold text-gray-700 dark:text-gray-200 mb-2">Pronóstico Estimado por IA:</h4>
+                                <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
                                     <p><strong>Tiempo de recuperación:</strong> {diagnosisResult.pronostico.tiempo_recuperacion || "N/A"}</p>
                                     <p><strong>Probabilidad de mejoría:</strong> {diagnosisResult.pronostico.probabilidad_mejoria || "N/A"}</p>
                                 </div>
@@ -742,133 +736,128 @@ export default function NuevoDiagnosticoPage() {
                         )}
                     </div>
                     
-                    <Separator className="my-6" />
+                    <Separator className="my-6 dark:bg-gray-600" />
 
-                    {/* Formulario de Datos del Paciente */}
                     <div className="space-y-6">
-                        <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Información del Paciente y Examen</h3>
+                        <h3 className="text-lg font-semibold text-gray-800 dark:text-white border-b dark:border-gray-700 pb-2">Información del Paciente y Examen</h3>
                         <div className="space-y-2 relative">
-                        <Label htmlFor="searchPatient" className="text-gray-700 font-medium">Buscar y Seleccionar Paciente*</Label>
+                        <Label htmlFor="searchPatient" className="text-gray-700 dark:text-gray-300 font-medium">Buscar y Seleccionar Paciente*</Label>
                         <div className="relative">
-                            <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" /> 
+                            <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
                             <Input
                             id="searchPatient"
                             ref={searchInputRef}
                             placeholder="Buscar por NUI, nombre o apellido..."
-                            className="pl-11 border-gray-300 h-11"
-                            value={searchTerm} // Controlado por estado
+                            className="pl-11 border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 h-11"
+                            value={searchTerm} 
                             onChange={handlePatientSearch}
                             onFocus={() => setShowSearchResults(true)}
-                            required={!pacienteId} 
+                            required={!pacienteId}
                             />
                         </div>
-                        {searchLoading && <p className="text-xs text-gray-500 mt-1.5">Buscando...</p>}
-                        {searchError && <p className="text-xs text-red-500 mt-1.5">{searchError}</p>}
+                        {searchLoading && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">Buscando...</p>}
+                        {searchError && <p className="text-xs text-red-500 dark:text-red-400 mt-1.5">{searchError}</p>}
                         
-                        {/* Desplegable de resultados de búsqueda */}
-                        {console.log("[Render] showSearchResults:", showSearchResults, "searchResults:", searchResults)}
                         {showSearchResults && searchResults.length > 0 && (
-                            <div 
-                                ref={searchResultsRef} 
-                                className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto"
+                            <div
+                                ref={searchResultsRef}
+                                className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto"
                             >
                             {searchResults.map((patient) => (
                                 <div
                                 key={patient.id_usuario}
-                                className="px-4 py-2.5 hover:bg-teal-50 cursor-pointer border-b border-gray-100 last:border-0"
+                                className="px-4 py-2.5 hover:bg-teal-50 dark:hover:bg-gray-700/70 cursor-pointer border-b border-gray-100 dark:border-gray-700 last:border-0"
                                 onClick={() => selectPatient(patient)}
                                 >
-                                <div className="font-medium text-gray-800 text-sm">{patient.primer_nombre} {patient.primer_apellido}</div>
-                                <div className="text-xs text-gray-500">NUI: {patient.nui}</div>
+                                <div className="font-medium text-gray-800 dark:text-gray-100 text-sm">{patient.primer_nombre} {patient.primer_apellido}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">NUI: {patient.nui}</div>
                                 </div>
                             ))}
                             </div>
                         )}
-                        {pacienteId && <p className="text-xs text-green-600 mt-1">Paciente seleccionado (ID: {pacienteId}).</p>}
+                        {pacienteId && <p className="text-xs text-green-600 dark:text-green-500 mt-1">Paciente seleccionado (ID: {pacienteId}).</p>}
                         </div>
 
-                        {/* Campos de Paciente (controlados por estado) */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
-                            <Label htmlFor="patientFirstName" className="text-gray-700">Nombre(s)</Label>
-                            <Input 
-                                id="patientFirstName" 
-                                value={patientFirstName} 
-                                onChange={(e) => setPatientFirstName(e.target.value)} 
-                                className="border-gray-300 bg-gray-100" 
-                                readOnly 
+                            <Label htmlFor="patientFirstName" className="text-gray-700 dark:text-gray-300">Nombre(s)</Label>
+                            <Input
+                                id="patientFirstName"
+                                value={patientFirstName}
+                                onChange={(e) => setPatientFirstName(e.target.value)}
+                                className="border-gray-300 bg-gray-100 dark:border-gray-600 dark:bg-gray-700/60 dark:text-gray-300 dark:placeholder-gray-500"
+                                readOnly
                                 placeholder="Automático al seleccionar"
                             />
                         </div>
                         <div className="space-y-1.5">
-                            <Label htmlFor="patientLastName" className="text-gray-700">Apellido(s)</Label>
-                            <Input 
-                                id="patientLastName" 
-                                value={patientLastName} 
-                                onChange={(e) => setPatientLastName(e.target.value)} 
-                                className="border-gray-300 bg-gray-100" 
-                                readOnly 
+                            <Label htmlFor="patientLastName" className="text-gray-700 dark:text-gray-300">Apellido(s)</Label>
+                            <Input
+                                id="patientLastName"
+                                value={patientLastName}
+                                onChange={(e) => setPatientLastName(e.target.value)}
+                                className="border-gray-300 bg-gray-100 dark:border-gray-600 dark:bg-gray-700/60 dark:text-gray-300 dark:placeholder-gray-500"
+                                readOnly
                                 placeholder="Automático al seleccionar"
                             />
                         </div>
                         <div className="space-y-1.5">
-                            <Label htmlFor="patientNui" className="text-gray-700">NUI/Documento</Label>
-                            <Input 
-                                id="patientNui" 
-                                value={patientNui} 
-                                onChange={(e) => setPatientNui(e.target.value)} 
-                                className="border-gray-300 bg-gray-100" 
-                                readOnly 
+                            <Label htmlFor="patientNui" className="text-gray-700 dark:text-gray-300">NUI/Documento</Label>
+                            <Input
+                                id="patientNui"
+                                value={patientNui}
+                                onChange={(e) => setPatientNui(e.target.value)}
+                                className="border-gray-300 bg-gray-100 dark:border-gray-600 dark:bg-gray-700/60 dark:text-gray-300 dark:placeholder-gray-500"
+                                readOnly
                                 placeholder="Automático al seleccionar"
                             />
                         </div>
                         </div>
                     
-                        {/* Campo Fecha Examen (controlado por estado) */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="space-y-1.5 md:col-span-1"> 
-                                <Label htmlFor="examDate" className="text-gray-700">Fecha del Examen</Label>
-                                <Input 
-                                    id="examDate" 
-                                    type="date" 
+                            <div className="space-y-1.5 md:col-span-1">
+                                <Label htmlFor="examDate" className="text-gray-700 dark:text-gray-300">Fecha del Examen</Label>
+                                <Input
+                                    id="examDate"
+                                    type="date"
                                     value={examDate}
                                     onChange={(e) => setExamDate(e.target.value)}
-                                    className="border-gray-300" 
+                                    className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:[color-scheme:dark]"
                                 />
                             </div>
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label htmlFor="clinicalHistory" className="text-gray-700">Breve Historia Clínica Relevante (Opcional)</Label>
+                            <Label htmlFor="clinicalHistory" className="text-gray-700 dark:text-gray-300">Breve Historia Clínica Relevante (Opcional)</Label>
                             <Textarea
                                 id="clinicalHistory"
                                 value={clinicalHistory}
                                 onChange={(e) => setClinicalHistory(e.target.value)}
                                 placeholder="Ej: Paciente con tos persistente por 2 semanas, sin fiebre..."
                                 rows={3}
-                                className="border-gray-300 resize-y min-h-[80px]"
+                                className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 resize-y min-h-[80px]"
                             />
                         </div>
                     </div>
-                    <CardFooter className="bg-gray-50 border-t px-0 py-0 mt-8 -mx-6 -mb-6 rounded-b-xl">
+                    <CardFooter className="bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-600 px-0 py-0 mt-8 -mx-6 -mb-6 rounded-b-xl">
                         <div className="flex flex-col sm:flex-row justify-between items-center w-full p-6 gap-3">
-                            <Button type="button" variant="outline" onClick={() => setActiveTab("cargar")} className="w-full sm:w-auto">
+                            <Button type="button" variant="outline" onClick={() => setActiveTab("cargar")} className="w-full sm:w-auto dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
                                 Volver a Cargar Imagen
                             </Button>
                             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                                <Button 
-                                    type="button" 
-                                    onClick={handleDownloadReport} 
+                                <Button
+                                    type="button"
+                                    onClick={handleDownloadReport}
                                     variant="outline"
-                                    className="border-teal-500 text-teal-600 hover:bg-teal-50 w-full sm:w-auto"
+                                    className="border-teal-500 text-teal-600 hover:bg-teal-50 dark:border-teal-600 dark:text-teal-400 dark:hover:bg-teal-700/40 w-full sm:w-auto"
                                     disabled={!pacienteId || !diagnosisResult}
                                 >
                                     <Download className="h-4 w-4 mr-2" />
                                     Descargar PDF
                                 </Button>
-                                <Button 
-                                    type="submit" 
-                                    className="bg-teal-600 hover:bg-teal-700 text-white font-semibold w-full sm:w-auto"
+                                <Button
+                                    type="submit"
+                                    className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600 font-semibold w-full sm:w-auto"
                                     disabled={loading || !pacienteId || !analysisComplete || !diagnosisResult}
                                 >
                                     <Save className="h-4 w-4 mr-2" />
@@ -880,12 +869,12 @@ export default function NuevoDiagnosticoPage() {
                     </form>
                 ) : (
                     <div className="flex flex-col items-center justify-center space-y-4 py-16 text-center">
-                    <AlertCircle className="h-16 w-16 text-gray-400" />
-                    <p className="text-lg font-medium text-gray-600">Resultados no disponibles.</p>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <AlertCircle className="h-16 w-16 text-gray-400 dark:text-gray-500" />
+                    <p className="text-lg font-medium text-gray-600 dark:text-gray-300">Resultados no disponibles.</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                         Por favor, cargue una imagen y ejecute el análisis en la pestaña anterior.
                     </p>
-                    <Button variant="outline" onClick={() => setActiveTab("cargar")} className="mt-4">
+                    <Button variant="outline" onClick={() => setActiveTab("cargar")} className="mt-4 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
                             Ir a Cargar Imagen
                         </Button>
                     </div>
@@ -894,7 +883,7 @@ export default function NuevoDiagnosticoPage() {
             </Card>
             </TabsContent>
         </Tabs>
-      </div> 
+      </div>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth"; // Importar getAuth
+import { getAuth, inMemoryPersistence, setPersistence, browserLocalPersistence, browserSessionPersistence } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
@@ -9,8 +9,39 @@ const firebaseConfig = {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "",
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "",
 };
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app); // Obtener la instancia de Auth
+const auth = getAuth(app);
 
-export { app, auth }; // Exportar app y auth
+// Configurar persistencia con manejo de cookies
+(async () => {
+  try {
+    // Configurar persistencia LOCAL consistentemente
+    await setPersistence(auth, browserLocalPersistence);
+    console.log("[Firebase Config] Persistencia configurada a LOCAL");
+    
+    // Configurar cookies manualmente si es necesario
+    if (typeof window !== 'undefined') {
+      auth.onAuthStateChanged(async (user) => {
+        if (user) {
+          document.cookie = `firebaseAuthToken=${await user.getIdToken()}; path=/; secure; samesite=lax`;
+        } else {
+          document.cookie = 'firebaseAuthToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        }
+      });
+    }
+  } catch (error) {
+    console.error("[Firebase Config] Error configurando persistencia local:", error);
+    try {
+      // Fallback a persistencia de sesión
+      await setPersistence(auth, browserSessionPersistence);
+      console.log("[Firebase Config] Persistencia configurada a SESSION");
+    } catch (sessionError) {
+      console.error("[Firebase Config] Error configurando persistencia de sesión:", sessionError);
+      await setPersistence(auth, inMemoryPersistence);
+    }
+  }
+})();
+
+export { app, auth };

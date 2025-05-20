@@ -80,8 +80,8 @@ export default function LoginPage() {
           router.push("/dashboard");
         }
       } else {
-        if (!error) { // Solo setea el error si login() no lo hizo ya (ej. a través de Swal)
-            setError("Fallo el inicio de sesión. Por favor, verifica tus credenciales.");
+        if (!error) { 
+          setError("Fallo el inicio de sesión. Por favor, verifica tus credenciales.");
         }
       }
     } catch (err: any) {
@@ -95,7 +95,6 @@ export default function LoginPage() {
   const handleTotpVerification = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    // Validación mejorada de los datos
     if (!mfaUserUid) {
       console.error("[LoginPage] Error: firebase_uid no disponible para verificación MFA");
       setTotpError("Error de autenticación: Identificador de usuario no disponible. Por favor, inicia sesión nuevamente.");
@@ -119,7 +118,6 @@ export default function LoginPage() {
     setTotpError("");
 
     try {
-      // Preparar y mostrar los datos que se enviarán
       const payload = {
         firebase_uid: mfaUserUid,
         token: totpCode
@@ -132,7 +130,6 @@ export default function LoginPage() {
         body: JSON.stringify(payload),
       });
       
-      // Capturar y parsear la respuesta
       const dataText = await response.text();
       let data;
       try {
@@ -153,8 +150,6 @@ export default function LoginPage() {
         setShowMfaStep(false);
         setTotpCode("");
         setMfaUserUid(null);
-        // No es necesario llamar a refreshUser aquí si el onAuthStateChanged del AuthContext
-        // ya maneja la actualización del usuario globalmente cuando Firebase confirma el login.
         router.push("/dashboard");
       } else {
         console.warn("[LoginPage] La verificación MFA no fue exitosa:", data.message);
@@ -179,7 +174,7 @@ export default function LoginPage() {
     setResetSuccessMessage("");
     setResetErrorMessage("");
     try {
-      await sendPasswordResetEmail(authInstance, resetEmail); // authInstance en lugar de auth
+      await sendPasswordResetEmail(authInstance, resetEmail); 
       setResetSuccessMessage(
         "Se ha enviado un enlace para restablecer tu contraseña a tu correo electrónico. Por favor, revisa tu bandeja de entrada (y la carpeta de spam)."
       );
@@ -200,33 +195,33 @@ export default function LoginPage() {
     }
   };
 
-  if (authLoading && !showMfaStep) { // Solo mostrar loader principal si no estamos en el paso de MFA
+  if (authLoading && !showMfaStep) { 
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-teal-50 to-white">
-        <Loader2 className="h-12 w-12 text-teal-600 animate-spin" />
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-teal-50 to-white dark:from-gray-900 dark:to-gray-800">
+        <Loader2 className="h-12 w-12 text-teal-600 dark:text-teal-400 animate-spin" />
       </div>
     );
   }
 
   return (
     <Dialog open={isResetPasswordModalOpen} onOpenChange={setIsResetPasswordModalOpen}>
-      <div className="flex min-h-screen bg-gradient-to-br from-teal-50 to-white">
-        <div className="hidden md:flex md:w-1/2 flex-col justify-center items-center bg-teal-600 p-8">
+      <div className="flex min-h-screen bg-gradient-to-br from-teal-50 to-white dark:from-gray-900 dark:to-gray-800">
+        <div className="hidden md:flex md:w-1/2 flex-col justify-center items-center bg-teal-600 dark:bg-teal-700 p-8">
           <div className="max-w-md text-center">
             <Image src="/Logo_sofia.png" alt="SOFIA AI Medical Logo" width={120} height={120} className="mx-auto mb-8 rounded-2xl bg-white p-4 shadow-lg" priority />
             <h1 className="text-4xl font-bold text-white mb-4">SOFIA AI Medical</h1>
-            <p className="text-teal-100 text-lg mb-8">Únete a nuestra plataforma y transforma la atención médica con tecnología de vanguardia.</p>
+            <p className="text-teal-100 dark:text-teal-200 text-lg mb-8">Únete a nuestra plataforma y transforma la atención médica con tecnología de vanguardia.</p>
             <div className="space-y-6">
               <div className="flex items-center text-white">
-                <div className="bg-teal-500 p-2 rounded-full mr-3"><FileText size={20} /></div>
+                <div className="bg-teal-500 dark:bg-teal-600 p-2 rounded-full mr-3"><FileText size={20} /></div>
                 <p className="text-left">Acceso a diagnósticos asistidos por IA</p>
               </div>
               <div className="flex items-center text-white">
-                <div className="bg-teal-500 p-2 rounded-full mr-3"><UserCircle size={20} /></div>
+                <div className="bg-teal-500 dark:bg-teal-600 p-2 rounded-full mr-3"><UserCircle size={20} /></div>
                 <p className="text-left">Comunidad de profesionales médicos</p>
               </div>
               <div className="flex items-center text-white">
-                <div className="bg-teal-500 p-2 rounded-full mr-3"><Award size={20} /></div>
+                <div className="bg-teal-500 dark:bg-teal-600 p-2 rounded-full mr-3"><Award size={20} /></div>
                 <p className="text-left">Desarrollo profesional continuo</p>
               </div>
             </div>
@@ -235,71 +230,79 @@ export default function LoginPage() {
 
         <div className="w-full md:w-1/2 flex items-center justify-center p-4 md:p-8">
           {!showMfaStep ? (
-            <Card className="w-full max-w-md border-gray-200 shadow-xl rounded-lg">
+            <Card className="w-full max-w-md border-gray-200 dark:border-gray-700 shadow-xl rounded-lg bg-white dark:bg-gray-800">
               <CardHeader className="space-y-1 text-center pt-8">
-                <CardTitle className="text-3xl font-bold text-gray-800">Iniciar Sesión</CardTitle>
-                <CardDescription className="text-gray-500 pt-1">Ingrese sus credenciales para acceder al sistema</CardDescription>
+                <CardTitle className="text-3xl font-bold text-gray-800 dark:text-white">Iniciar Sesión</CardTitle>
+                <CardDescription className="text-gray-500 dark:text-gray-400 pt-1">Ingrese sus credenciales para acceder al sistema</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 pb-4">
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {error && (
-                    <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Error de Inicio de Sesión</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>
+                    <Alert variant="destructive" className="dark:bg-red-900/30 dark:border-red-700 dark:text-red-300">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Error de Inicio de Sesión</AlertTitle>
+                        <AlertDescription>{error}</AlertDescription>
+                    </Alert>
                   )}
                   <div className="space-y-2">
-                    <Label htmlFor="email-login" className="text-gray-700 font-medium">Correo Electrónico</Label>
-                    <Input id="email-login" type="email" placeholder="doctor@sofia.ai" value={email} onChange={(e) => setEmail(e.target.value)} required className="bg-white border-gray-300 h-10 rounded-md" />
+                    <Label htmlFor="email-login" className="text-gray-700 dark:text-gray-300 font-medium">Correo Electrónico</Label>
+                    <Input id="email-login" type="email" placeholder="doctor@sofia.ai" value={email} onChange={(e) => setEmail(e.target.value)} required className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 dark:text-white dark:placeholder-gray-400 h-10 rounded-md" />
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="password-login" className="text-gray-700 font-medium">Contraseña</Label>
+                      <Label htmlFor="password-login" className="text-gray-700 dark:text-gray-300 font-medium">Contraseña</Label>
                       <DialogTrigger asChild>
-                        <Button variant="link" className="p-0 h-auto text-xs text-teal-600 hover:text-teal-800">Recuperar Contraseña</Button>
+                        <Button variant="link" className="p-0 h-auto text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300">Recuperar Contraseña</Button>
                       </DialogTrigger>
                     </div>
                     <div className="relative">
-                      <Input id="password-login" type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="bg-white border-gray-300 pr-10 h-10 rounded-md" />
-                      <button type="button" aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-teal-600" onClick={() => setShowPassword(!showPassword)}>
+                      <Input id="password-login" type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 dark:text-white pr-10 h-10 rounded-md" />
+                      <button type="button" aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400" onClick={() => setShowPassword(!showPassword)}>
                         {showPassword ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
                       </button>
                     </div>
                   </div>
-                  <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2.5 rounded-md" disabled={isLoading}>
+                  <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600 text-white font-semibold py-2.5 rounded-md" disabled={isLoading}>
                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin inline-flex" /> : null}
                     {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
                   </Button>
                 </form>
               </CardContent>
               <CardFooter className="flex flex-col space-y-3 pt-4 pb-6">
-                <div className="text-center text-sm text-gray-600">¿No tiene una cuenta?{" "}
-                  <Link href="/register" className="text-teal-600 hover:text-teal-800 font-medium">Registrarse</Link>
+                <div className="text-center text-sm text-gray-600 dark:text-gray-400">¿No tiene una cuenta?{" "}
+                  <Link href="/register" className="text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium">Registrarse</Link>
                 </div>
-                <p className="text-xs text-gray-500">© {new Date().getFullYear()} SOFIA AI Medical. Todos los derechos reservados.</p>
+                <p className="text-xs text-gray-500 dark:text-gray-500">© {new Date().getFullYear()} SOFIA AI Medical. Todos los derechos reservados.</p>
               </CardFooter>
             </Card>
           ) : (
-            <Card className="w-full max-w-md border-gray-200 shadow-xl rounded-lg">
+            <Card className="w-full max-w-md border-gray-200 dark:border-gray-700 shadow-xl rounded-lg bg-white dark:bg-gray-800">
               <CardHeader className="space-y-1 text-center pt-8">
-                <ShieldCheck className="mx-auto h-12 w-12 text-teal-600" />
-                <CardTitle className="text-2xl font-bold text-gray-800 pt-2">Verificación de Dos Pasos</CardTitle>
-                <CardDescription className="text-gray-500 pt-1">Ingresa el código de tu aplicación de autenticación.</CardDescription>
+                <ShieldCheck className="mx-auto h-12 w-12 text-teal-600 dark:text-teal-400" />
+                <CardTitle className="text-2xl font-bold text-gray-800 dark:text-white pt-2">Verificación de Dos Pasos</CardTitle>
+                <CardDescription className="text-gray-500 dark:text-gray-400 pt-1">Ingresa el código de tu aplicación de autenticación.</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 pb-4">
                 <form onSubmit={handleTotpVerification} className="space-y-6">
                   {totpError && (
-                    <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Error de Verificación</AlertTitle><AlertDescription>{totpError}</AlertDescription></Alert>
+                    <Alert variant="destructive" className="dark:bg-red-900/30 dark:border-red-700 dark:text-red-300">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Error de Verificación</AlertTitle>
+                        <AlertDescription>{totpError}</AlertDescription>
+                    </Alert>
                   )}
                   <div className="space-y-2">
-                    <Label htmlFor="totp-code" className="text-gray-700 font-medium">Código de Autenticación</Label>
-                    <Input id="totp-code" type="text" inputMode="numeric" placeholder="123456" value={totpCode} onChange={(e) => setTotpCode(e.target.value.replace(/\s/g, ''))} required maxLength={6} pattern="\d{6}" className="bg-white border-gray-300 h-12 rounded-md text-center text-lg tracking-widest font-mono" disabled={isVerifyingTotp} />
+                    <Label htmlFor="totp-code" className="text-gray-700 dark:text-gray-300 font-medium">Código de Autenticación</Label>
+                    <Input id="totp-code" type="text" inputMode="numeric" placeholder="123456" value={totpCode} onChange={(e) => setTotpCode(e.target.value.replace(/\s/g, ''))} required maxLength={6} pattern="\d{6}" className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 dark:text-white h-12 rounded-md text-center text-lg tracking-widest font-mono" disabled={isVerifyingTotp} />
                   </div>
-                  <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2.5 rounded-md" disabled={isVerifyingTotp || totpCode.length !== 6}>
+                  <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600 text-white font-semibold py-2.5 rounded-md" disabled={isVerifyingTotp || totpCode.length !== 6}>
                     {isVerifyingTotp ? <Loader2 className="mr-2 h-4 w-4 animate-spin inline-flex" /> : null}
                     {isVerifyingTotp ? "Verificando..." : "Verificar Código"}
                   </Button>
                 </form>
               </CardContent>
               <CardFooter className="flex flex-col space-y-3 pt-4 pb-6">
-                <Button variant="link" onClick={() => { setShowMfaStep(false); setError("Intento de login cancelado para reingresar credenciales."); setEmail(""); setPassword(""); setTotpCode(""); setMfaUserUid(null); }} className="text-sm text-gray-500 hover:text-teal-700">
+                <Button variant="link" onClick={() => { setShowMfaStep(false); setError("Intento de login cancelado para reingresar credenciales."); setEmail(""); setPassword(""); setTotpCode(""); setMfaUserUid(null); }} className="text-sm text-gray-500 dark:text-gray-400 hover:text-teal-700 dark:hover:text-teal-300">
                   Volver a ingresar contraseña
                 </Button>
               </CardFooter>
@@ -307,18 +310,18 @@ export default function LoginPage() {
           )}
         </div>
 
-        <DialogContent className="sm:max-w-md rounded-lg">
+        <DialogContent className="sm:max-w-md rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-gray-800">Restablecer Contraseña</DialogTitle>
-            <DialogDescription className="text-sm text-gray-500 pt-1">
+            <DialogTitle className="text-xl font-semibold text-gray-800 dark:text-white">Restablecer Contraseña</DialogTitle>
+            <DialogDescription className="text-sm text-gray-500 dark:text-gray-400 pt-1">
               Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handlePasswordResetRequest} className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <Label htmlFor="reset-email" className="text-gray-700 font-medium">Correo Electrónico</Label>
+              <Label htmlFor="reset-email" className="text-gray-700 dark:text-gray-300 font-medium">Correo Electrónico</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 <Input
                   id="reset-email"
                   type="email"
@@ -330,38 +333,38 @@ export default function LoginPage() {
                     setResetSuccessMessage("");
                   }}
                   required
-                  className="pl-10 h-10 rounded-md border-gray-300"
+                  className="pl-10 h-10 rounded-md border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                   disabled={isResettingPassword}
                 />
               </div>
             </div>
             {resetSuccessMessage && (
-              <Alert variant="default" className="bg-green-50 border-green-300 text-green-700">
+              <Alert variant="default" className="bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300">
                 <CheckCircle className="h-4 w-4" />
                 <AlertTitle>Éxito</AlertTitle>
                 <AlertDescription>{resetSuccessMessage}</AlertDescription>
               </Alert>
             )}
             {resetErrorMessage && (
-              <Alert variant="destructive">
+              <Alert variant="destructive" className="dark:bg-red-900/30 dark:border-red-700 dark:text-red-300">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>{resetErrorMessage}</AlertDescription>
               </Alert>
             )}
-            <DialogFooter className="pt-2">
+            <DialogFooter className="pt-2 dark:border-t dark:border-gray-700/50">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setIsResetPasswordModalOpen(false)}
-                className="border-gray-300 text-gray-700 hover:bg-gray-100 rounded-md"
+                className="border-gray-300 text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 rounded-md"
                 disabled={isResettingPassword}
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
-                className="bg-teal-600 hover:bg-teal-700 text-white rounded-md"
+                className="bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600 text-white rounded-md"
                 disabled={isResettingPassword}
               >
                 {isResettingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

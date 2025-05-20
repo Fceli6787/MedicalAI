@@ -1445,7 +1445,7 @@ export async function enableUserMfa(id_usuario: number): Promise<boolean> {
   }
 }
 
-export interface FullUserFromDB {
+interface FullUserFromDB {
   id_usuario: number;
   id_tipo_documento: number;
   id_pais: number;
@@ -1459,15 +1459,26 @@ export interface FullUserFromDB {
   ultima_actividad: string | null;
   estado: string;
   firebase_uid: string;
-  roles: string[]; // Array de nombres de roles
+  roles: string[];
 }
 
-// Función para obtener todos los detalles del usuario y sus roles
 export const getFullUserByFirebaseUID = async (firebaseUid: string): Promise<FullUserFromDB | null> => {
+  console.log(`[DB getFullUserByFirebaseUID] INICIO - Buscando usuario completo con firebase_uid: '${firebaseUid}' (Tipo: ${typeof firebaseUid})`);
+
+  if (!firebaseUid || typeof firebaseUid !== 'string' || firebaseUid.trim() === '') {
+    console.error(`[DB getFullUserByFirebaseUID] ERROR: firebase_uid inválido o vacío: '${firebaseUid}'`);
+    return null;
+  }
+  const cleanFirebaseUid = firebaseUid.trim();
+
   let dbClient: Database | undefined;
-  console.log(`[DB getFullUserByFirebaseUID] Buscando usuario completo con firebase_uid: '${firebaseUid}'`);
+
   try {
-    dbClient = await getConnection(); // Asume que getConnection() está definida
+    dbClient = await getConnection();
+    if (!dbClient) {
+      console.error(`[DB getFullUserByFirebaseUID] ERROR CRÍTICO: No se pudo obtener conexión a la base de datos desde getConnection().`);
+      return null;
+    }
 
     const userQuery = `
       SELECT
@@ -1477,60 +1488,109 @@ export const getFullUserByFirebaseUID = async (firebaseUid: string): Promise<Ful
       FROM usuarios u
       WHERE u.firebase_uid = ?
     `;
-    const userResult = await dbClient.sql(userQuery, [firebaseUid]);
+    console.log(`[DB getFullUserByFirebaseUID] Ejecutando userQuery: "${userQuery}" con param: '${cleanFirebaseUid}'`);
+    const userResult = await dbClient.sql(userQuery, cleanFirebaseUid);
 
-    let userData: any = null;
-    if (Array.isArray(userResult) && userResult.length > 0) {
-      userData = userResult[0];
-    } else if (userResult && typeof (userResult as any).length === 'number' && (userResult as any).length > 0) {
-      userData = (userResult as any)[0];
+    console.log(`[DB getFullUserByFirebaseUID] userResult de dbClient.sql (datos base):`);
+    console.log(`    Tipo de userResult: ${typeof userResult}`);
+    console.log(`    Es Array? ${Array.isArray(userResult)}`);
+    console.log(`    userResult (directo):`, userResult);
+    console.log(`    userResult (JSON.stringify): ${JSON.stringify(userResult, null, 2)}`);
+
+    let userDataRow: any = null;
+
+    if (Array.isArray(userResult)) {
+      console.log(`[DB getFullUserByFirebaseUID] userResult ES un array. Longitud: ${userResult.length}`);
+      if (userResult.length > 0) {
+        userDataRow = userResult[0];
+      }
+    } else if (userResult && typeof userResult === 'object') {
+      console.log(`[DB getFullUserByFirebaseUID] userResult ES un objeto.`);
+      let tempArray: any[] | undefined;
+      if (typeof (userResult as any).length === 'number' && (userResult as any).length >= 0) {
+        console.log(`[DB getFullUserByFirebaseUID] userResult tiene propiedad 'length': ${(userResult as any).length}. Intentando Array.from().`);
+        try {
+          tempArray = Array.from(userResult as any);
+          console.log(`[DB getFullUserByFirebaseUID] Convertido a array con Array.from(). Longitud: ${tempArray.length}`);
+        } catch (e: any) {
+          console.warn(`[DB getFullUserByFirebaseUID] Falló Array.from(userResult): ${e.message}. Probando otras propiedades.`);
+        }
+      }
+
+      if (!tempArray && Array.isArray((userResult as any).rows)) {
+        console.log(`[DB getFullUserByFirebaseUID] Usando userResult.rows. Longitud: ${(userResult as any).rows.length}`);
+        tempArray = (userResult as any).rows;
+      } else if (!tempArray && Array.isArray((userResult as any)._rows)) {
+        console.log(`[DB getFullUserByFirebaseUID] Usando userResult._rows. Longitud: ${(userResult as any)._rows.length}`);
+        tempArray = (userResult as any)._rows;
+      }
+
+      if (tempArray && tempArray.length > 0) {
+        userDataRow = tempArray[0];
+      }
     }
 
-    if (!userData) {
-      console.warn(`[DB getFullUserByFirebaseUID] No se encontró usuario en tabla 'usuarios' con firebase_uid: ${firebaseUid}`);
+    if (!userDataRow) {
+      console.warn(`[DB getFullUserByFirebaseUID] No se encontró usuario en tabla 'usuarios' con firebase_uid: ${cleanFirebaseUid} (después de procesar userResult).`);
       return null;
     }
-    console.log(`[DB getFullUserByFirebaseUID] Usuario base encontrado:`, userData);
+    console.log(`[DB getFullUserByFirebaseUID] userDataRow (datos base del usuario):`, JSON.stringify(userDataRow, null, 2));
 
-    // Obtener roles del usuario
     const rolesQuery = `
       SELECT r.nombre
       FROM roles r
       JOIN usuariosroles ur ON r.id_rol = ur.id_rol
       WHERE ur.id_usuario = ?
     `;
-    const rolesResult = await dbClient.sql(rolesQuery, [userData.id_usuario]);
+    console.log(`[DB getFullUserByFirebaseUID] Ejecutando rolesQuery con id_usuario: ${userDataRow.id_usuario}`);
+    const rolesResult = await dbClient.sql(rolesQuery, userDataRow.id_usuario);
+
+    console.log(`[DB getFullUserByFirebaseUID] rolesResult de dbClient.sql:`);
+    console.log(`    Tipo de rolesResult: ${typeof rolesResult}`);
+    console.log(`    Es Array? ${Array.isArray(rolesResult)}`);
+    console.log(`    rolesResult (directo):`, rolesResult);
+    console.log(`    rolesResult (JSON.stringify): ${JSON.stringify(rolesResult, null, 2)}`);
 
     let userRoles: string[] = [];
     if (Array.isArray(rolesResult)) {
-        userRoles = rolesResult.map((row: any) => row.nombre);
-    } else if (rolesResult && typeof (rolesResult as any).length === 'number') {
-        userRoles = Array.from(rolesResult as any).map((row: any) => row.nombre);
+      userRoles = rolesResult.map((row: any) => row.nombre);
+    } else if (rolesResult && typeof rolesResult === 'object') {
+      let tempRolesArray: any[] | undefined;
+      if (typeof (rolesResult as any).length === 'number' && (rolesResult as any).length >= 0) {
+        try { tempRolesArray = Array.from(rolesResult as any); } catch (e) { }
+      }
+      if (!tempRolesArray && Array.isArray((rolesResult as any).rows)) {
+        tempRolesArray = (rolesResult as any).rows;
+      } else if (!tempRolesArray && Array.isArray((rolesResult as any)._rows)) {
+        tempRolesArray = (rolesResult as any)._rows;
+      }
+      if (tempRolesArray) {
+        userRoles = tempRolesArray.map((row: any) => row.nombre);
+      }
     }
-    console.log(`[DB getFullUserByFirebaseUID] Roles encontrados para usuario ID ${userData.id_usuario}:`, userRoles);
+    console.log(`[DB getFullUserByFirebaseUID] Roles procesados para usuario ID ${userDataRow.id_usuario}:`, userRoles);
 
-    // Construir el objeto FullUserFromDB
     const fullUser: FullUserFromDB = {
-      id_usuario: Number(userData.id_usuario),
-      id_tipo_documento: Number(userData.id_tipo_documento),
-      id_pais: Number(userData.id_pais),
-      nui: String(userData.nui),
-      primer_nombre: String(userData.primer_nombre),
-      segundo_nombre: userData.segundo_nombre ? String(userData.segundo_nombre) : null,
-      primer_apellido: String(userData.primer_apellido),
-      segundo_apellido: userData.segundo_apellido ? String(userData.segundo_apellido) : null,
-      correo: String(userData.correo),
-      fecha_registro: String(userData.fecha_registro),
-      ultima_actividad: userData.ultima_actividad ? String(userData.ultima_actividad) : null,
-      estado: String(userData.estado),
-      firebase_uid: String(userData.firebase_uid),
+      id_usuario: Number(userDataRow.id_usuario),
+      id_tipo_documento: Number(userDataRow.id_tipo_documento),
+      id_pais: Number(userDataRow.id_pais),
+      nui: String(userDataRow.nui),
+      primer_nombre: String(userDataRow.primer_nombre),
+      segundo_nombre: userDataRow.segundo_nombre ? String(userDataRow.segundo_nombre) : null,
+      primer_apellido: String(userDataRow.primer_apellido),
+      segundo_apellido: userDataRow.segundo_apellido ? String(userDataRow.segundo_apellido) : null,
+      correo: String(userDataRow.correo),
+      fecha_registro: String(userDataRow.fecha_registro),
+      ultima_actividad: userDataRow.ultima_actividad ? String(userDataRow.ultima_actividad) : null,
+      estado: String(userDataRow.estado),
+      firebase_uid: String(userDataRow.firebase_uid),
       roles: userRoles,
     };
-    console.log(`[DB getFullUserByFirebaseUID] Usuario completo ensamblado:`, fullUser);
+    console.log(`[DB getFullUserByFirebaseUID] Usuario completo ensamblado:`, JSON.stringify(fullUser, null, 2));
     return fullUser;
 
   } catch (error: any) {
-    console.error(`[DB getFullUserByFirebaseUID] Error al obtener usuario completo por Firebase UID (${firebaseUid}):`, error.message, error.stack);
+    console.error(`[DB getFullUserByFirebaseUID] Error al obtener usuario completo por Firebase UID (${cleanFirebaseUid}):`, error.message, error.stack);
     return null;
   }
 };

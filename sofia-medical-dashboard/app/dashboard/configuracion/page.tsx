@@ -8,10 +8,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
+import { useTheme } from "next-themes"
 import { useAuth, User as AuthUserInterface } from "@/context/AuthContext" // Renombrado para claridad
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { AlertCircle, Save, User, Lock, Bell, Database, Shield, Zap, Loader2, CheckCircle, KeyRound } from "lucide-react"
+import { AlertCircle, Save, User, Lock, Database, Shield, Zap, Loader2, CheckCircle, KeyRound } from "lucide-react" 
 import QRCodeStyling from 'qr-code-styling';
 
 // Definir tipos para los estados para mejor claridad
@@ -23,21 +24,13 @@ interface UserFormState {
   telefono: string
 }
 
-interface NotificacionesState {
-  email: boolean
-  sistema: boolean
-  nuevasFunciones: boolean
-  reportesSemanal: boolean
-  reportesMensual: boolean
-}
-
 interface SeguridadState {
   sesionAutomatica: boolean
   tiempoSesion: string
 }
 
 interface SistemaState {
-  temaOscuro: boolean
+  temaOscuro: boolean // This will be driven by next-themes
   altaResolucion: boolean
   autoGuardado: boolean
   tiempoAutoGuardado: string
@@ -46,6 +39,7 @@ interface SistemaState {
 // Componente QR Code
 const QrCodeComponent = ({ data }: { data: string | null }) => {
   const qrRef = useRef<HTMLDivElement>(null);
+  const { theme } = useTheme(); // Get current theme
 
   useEffect(() => {
     if (data && qrRef.current) {
@@ -54,23 +48,25 @@ const QrCodeComponent = ({ data }: { data: string | null }) => {
         width: 256,
         height: 256,
         data: data,
-        image: '/Logo_sofia.png', // Asegúrate que esta imagen exista en tu carpeta public
-        dotsOptions: { color: '#0d9488', type: 'rounded' },
-        backgroundOptions: { color: '#ffffff' },
+        image: '/Logo_sofia.png', 
+        dotsOptions: { color: theme === 'dark' ? '#14b8a6' : '#0d9488', type: 'rounded' }, // Teal-500 for dark, Teal-600 for light
+        backgroundOptions: { color: theme === 'dark' ? '#374151' : '#ffffff' }, // Gray-700 for dark, White for light
         imageOptions: { crossOrigin: 'anonymous', margin: 5, imageSize: 0.3 },
-        cornersSquareOptions: { color: '#0f766e', type: 'extra-rounded' },
-        cornersDotOptions: { color: '#115e59', type: 'dot' }
+        cornersSquareOptions: { color: theme === 'dark' ? '#0f766e' : '#0f766e', type: 'extra-rounded' }, // Teal-700
+        cornersDotOptions: { color: theme === 'dark' ? '#134e4a' : '#115e59', type: 'dot' } // Teal-900 for dark, Teal-800 for light
       });
       qrCode.append(qrRef.current);
     }
-  }, [data]);
+  }, [data, theme]); // Re-render QR on theme change
 
   if (!data) return null;
-  return <div ref={qrRef} className="mx-auto my-4 p-4 bg-white inline-block rounded-lg shadow-md"></div>;
+  // Adjusted background for the QR container itself for better contrast in dark mode
+  return <div ref={qrRef} className="mx-auto my-4 p-4 bg-white dark:bg-gray-200 inline-block rounded-lg shadow-md"></div>;
 };
 
 export default function ConfiguracionPage() {
-  const { user, loading: authLoading, refreshUser } = useAuth(); // Obtener refreshUser del contexto
+  const { user, loading: authLoading, refreshUser } = useAuth(); 
+  const { theme, setTheme } = useTheme();
 
   const [userForm, setUserForm] = useState<UserFormState>({
     nombre: "",
@@ -80,23 +76,19 @@ export default function ConfiguracionPage() {
     telefono: "+1234567890",
   });
 
-  const [notificaciones, setNotificaciones] = useState<NotificacionesState>({
-    email: true, sistema: true, nuevasFunciones: true, reportesSemanal: false, reportesMensual: true,
-  });
-
   const [seguridad, setSeguridad] = useState<SeguridadState>({
     sesionAutomatica: true, tiempoSesion: "30",
   });
 
   const [sistema, setSistema] = useState<SistemaState>({
-    temaOscuro: false, altaResolucion: true, autoGuardado: true, tiempoAutoGuardado: "5",
+    temaOscuro: theme === 'dark', // Initialize based on current theme
+    altaResolucion: true, autoGuardado: true, tiempoAutoGuardado: "5",
   });
 
-  const [usersList, setUsersList] = useState<AuthUserInterface[]>([]); // Usar la interfaz importada
+  const [usersList, setUsersList] = useState<AuthUserInterface[]>([]); 
   const [pageError, setPageError] = useState<string | null>(null);
   const [loadingUsers, setLoadingUsers] = useState(true);
 
-  // Estados para MFA
   const [isMfaEnabledForUser, setIsMfaEnabledForUser] = useState<boolean>(false);
   const [otpauthUrl, setOtpauthUrl] = useState<string | null>(null);
   const [manualSecret, setManualSecret] = useState<string | null>(null);
@@ -106,7 +98,6 @@ export default function ConfiguracionPage() {
   const [mfaSuccessMessage, setMfaSuccessMessage] = useState<string | null>(null);
   const [mfaCurrentStep, setMfaCurrentStep] = useState<'initial' | 'showQr' | 'verify'>('initial');
 
-  // Efecto para inicializar datos del usuario y estado MFA
   useEffect(() => {
     if (user) {
       console.log("[ConfiguracionPage] useEffect[user] - User from AuthContext:", user);
@@ -114,33 +105,31 @@ export default function ConfiguracionPage() {
         ...prev,
         nombre: `${user.primer_nombre || ''} ${user.primer_apellido || ''}`.trim(),
         email: user.correo || '',
-        // Aquí podrías inicializar más campos del formulario de perfil si los tienes en el objeto 'user'
       }));
 
-      // Establecer el estado de MFA basado en user.mfa_enabled del AuthContext
       console.log("[ConfiguracionPage] useEffect[user] - Setting isMfaEnabledForUser based on user.mfa_enabled:", user.mfa_enabled);
       const mfaStatusFromContext = !!user.mfa_enabled;
       setIsMfaEnabledForUser(mfaStatusFromContext);
-                                                  
+                                            
       if (mfaStatusFromContext) {
-        // Si MFA ya está habilitado al cargar la página (viene del contexto),
-        // asegurarse de que el flujo de UI esté en el estado inicial.
         setMfaCurrentStep('initial');
-        setOtpauthUrl(null); // No mostrar QR si ya está habilitado
+        setOtpauthUrl(null);
         setMfaError(null);
-        // No limpiar mfaSuccessMessage aquí, podría ser útil si acaba de habilitarlo.
       } else {
-        // Si MFA no está habilitado según el contexto, asegurar estado inicial para habilitación.
         setMfaCurrentStep('initial');
         setOtpauthUrl(null);
       }
-
     } else {
       console.log("[ConfiguracionPage] useEffect[user] - No user from AuthContext.");
-      setIsMfaEnabledForUser(false); // Si no hay usuario, MFA no está habilitado
+      setIsMfaEnabledForUser(false);
       setMfaCurrentStep('initial');
     }
-  }, [user]); // Se ejecuta cada vez que el objeto 'user' del AuthContext cambia
+  }, [user]);
+
+  // Sync local 'temaOscuro' state with next-themes
+  useEffect(() => {
+    setSistema(prev => ({ ...prev, temaOscuro: theme === 'dark' }));
+  }, [theme]);
 
 
   const handleUserFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,12 +144,17 @@ export default function ConfiguracionPage() {
   };
 
   const handleSwitchChange = (
-    id: keyof NotificacionesState | keyof SeguridadState | keyof SistemaState,
+    id: keyof SeguridadState | keyof SistemaState, 
     checked: boolean,
   ) => {
-    if (id in notificaciones) setNotificaciones((prev) => ({ ...prev, [id as keyof NotificacionesState]: checked }));
-    else if (id in seguridad) setSeguridad((prev) => ({ ...prev, [id as keyof SeguridadState]: checked }));
-    else if (id in sistema) setSistema((prev) => ({ ...prev, [id as keyof SistemaState]: checked }));
+    if (id === 'temaOscuro' && id in sistema) { // Special handling for theme switch
+      setTheme(checked ? 'dark' : 'light');
+      // The useEffect for 'theme' will update sistema.temaOscuro
+    } else if (id in seguridad) {
+      setSeguridad((prev) => ({ ...prev, [id as keyof SeguridadState]: checked }));
+    } else if (id in sistema) {
+      setSistema((prev) => ({ ...prev, [id as keyof SistemaState]: checked }));
+    }
   };
 
   useEffect(() => {
@@ -168,10 +162,10 @@ export default function ConfiguracionPage() {
       if (user?.roles?.includes("admin")) {
         try {
           setLoadingUsers(true);
-          const response = await fetch("/api/dashboard/users"); // Llama sin UID para obtener todos los usuarios
+          const response = await fetch("/api/dashboard/users");
           const data = await response.json();
           if (response.ok) {
-            setUsersList(data.users || []); // Usar setUsersList
+            setUsersList(data.users || []);
           } else {
             setPageError(data.error || "Error fetching users");
           }
@@ -182,10 +176,9 @@ export default function ConfiguracionPage() {
           setLoadingUsers(false);
         }
       } else {
-        setLoadingUsers(false); // No es admin, no cargar lista de usuarios
+        setLoadingUsers(false);
       }
     };
-    // Solo llamar si el usuario del contexto ya cargó y es admin
     if (!authLoading && user) {
         fetchUsers();
     }
@@ -227,25 +220,21 @@ export default function ConfiguracionPage() {
       if (!response.ok) throw new Error(data.error || 'Error al verificar el código MFA.');
       
       setMfaSuccessMessage(data.message || "¡Autenticación de Dos Factores habilitada exitosamente!");
-      setMfaCurrentStep('initial'); 
-      setOtpauthUrl(null); 
-      setManualSecret(null); 
+      setMfaCurrentStep('initial');
+      setOtpauthUrl(null);
+      setManualSecret(null);
       setVerificationCode('');
       
       console.log("[ConfiguracionPage] MFA verificado exitosamente. Llamando a refreshUser().");
-      await refreshUser(); // Actualizar el estado global del usuario en AuthContext
-      // El useEffect[user] se disparará y actualizará isMfaEnabledForUser
-    } catch (err: any) { 
-      setMfaError(err.message); 
+      await refreshUser();
+    } catch (err: any) {
+      setMfaError(err.message);
       console.error("[ConfiguracionPage] Error en handleVerifyAndEnableMfa:", err);
     }
     finally { setIsMfaLoading(false); }
   };
 
   const handleDisableMfa = async () => {
-    // TODO: Implementar la lógica de deshabilitación
-    // Esto requerirá un nuevo endpoint en el backend (ej. /api/mfa/disable)
-    // y actualizar el estado local y global.
     if (!user?.firebase_uid) {
       setMfaError("No se pudo obtener la información del usuario.");
       return;
@@ -255,17 +244,16 @@ export default function ConfiguracionPage() {
 
     setIsMfaLoading(true); setMfaError(null); setMfaSuccessMessage(null);
     try {
-      // Asumiendo que tienes un endpoint /api/mfa/disable
       const response = await fetch('/api/mfa/disable', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firebase_uid: user.firebase_uid }), // Podrías necesitar verificar identidad aquí (ej. contraseña)
+        body: JSON.stringify({ firebase_uid: user.firebase_uid }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Error al deshabilitar MFA.");
       
       setMfaSuccessMessage(data.message || "Autenticación de Dos Factores deshabilitada.");
-      await refreshUser(); // Refrescar el contexto, el useEffect actualizará isMfaEnabledForUser
+      await refreshUser();
       setMfaCurrentStep('initial');
     } catch (err: any) {
       setMfaError(err.message);
@@ -276,17 +264,17 @@ export default function ConfiguracionPage() {
   };
 
   if (authLoading) {
-    return <div className="flex justify-center items-center h-screen"><Loader2 className="h-10 w-10 animate-spin text-teal-600" /> <p className="ml-3 text-lg">Cargando...</p></div>;
+    return <div className="flex justify-center items-center h-screen dark:bg-gray-900"><Loader2 className="h-10 w-10 animate-spin text-teal-600 dark:text-teal-400" /> <p className="ml-3 text-lg dark:text-gray-300">Cargando...</p></div>;
   }
   if (!user) {
     console.log("[ConfiguracionPage] No hay usuario, renderizando mensaje de inicio de sesión.");
-    return <div className="text-center py-10">Por favor, inicia sesión para acceder a la configuración.</div>;
+    return <div className="text-center py-10 dark:text-gray-300 dark:bg-gray-900">Por favor, inicia sesión para acceder a la configuración.</div>;
   }
   if (user.roles && user.roles.includes('paciente')) {
     return (
-      <div className="w-full py-8 px-6 max-w-full overflow-x-hidden">
-        <div className="mb-6"><h1 className="text-3xl font-bold tracking-tight text-gray-900">Configuración</h1></div>
-        <Alert variant="destructive">
+      <div className="w-full py-8 px-6 max-w-full overflow-x-hidden dark:bg-gray-900">
+        <div className="mb-6"><h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Configuración</h1></div>
+        <Alert variant="destructive" className="dark:bg-red-900/30 dark:border-red-700 dark:text-red-300">
           <AlertCircle className="h-4 w-4" /><AlertTitle>Acceso Restringido</AlertTitle>
           <AlertDescription>Los pacientes no tienen acceso a esta sección de configuración.</AlertDescription>
         </Alert>
@@ -297,212 +285,138 @@ export default function ConfiguracionPage() {
   console.log("[ConfiguracionPage] Renderizando UI de MFA. isMfaEnabledForUser:", isMfaEnabledForUser, "user.mfa_enabled del contexto:", user?.mfa_enabled, "mfaCurrentStep:", mfaCurrentStep);
 
   return (
-    <div className="w-full py-8 px-6 max-w-full overflow-x-hidden">
+    <div className="w-full py-8 px-6 max-w-full overflow-x-hidden bg-slate-50 dark:bg-gray-900">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Configuración</h1>
-        <p className="text-gray-500">Gestione las preferencias de su cuenta y del sistema</p>
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Configuración</h1>
+        <p className="text-gray-500 dark:text-gray-400">Gestione las preferencias de su cuenta y del sistema</p>
       </div>
 
       {(loadingUsers && user?.roles?.includes("admin")) ? (
-        <div className="text-center text-gray-600 py-10"><Loader2 className="h-6 w-6 animate-spin inline mr-2" />Cargando datos de configuración...</div>
+        <div className="text-center text-gray-600 dark:text-gray-400 py-10"><Loader2 className="h-6 w-6 animate-spin inline mr-2" />Cargando datos de configuración...</div>
       ) : pageError ? (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="dark:bg-red-900/30 dark:border-red-700 dark:text-red-300">
           <AlertCircle className="h-4 w-4" /> <AlertTitle>Error al Cargar Datos</AlertTitle> <AlertDescription>{pageError}</AlertDescription>
         </Alert>
       ) : (
         <div className="w-full">
           {user?.roles?.includes("admin") && (
-            <Card className="border-teal-200 shadow-sm mb-6">
-              <CardHeader className="bg-teal-50">
-                <CardTitle className="text-teal-700">Usuarios del Sistema</CardTitle>
-                <CardDescription>Lista de usuarios registrados en el sistema</CardDescription>
+            <Card className="border-teal-200 dark:border-teal-700/50 shadow-sm mb-6 bg-white dark:bg-gray-800">
+              <CardHeader className="bg-teal-50 dark:bg-teal-800/30 dark:border-b dark:border-teal-700/50">
+                <CardTitle className="text-teal-700 dark:text-teal-300">Usuarios del Sistema</CardTitle>
+                <CardDescription className="dark:text-gray-400">Lista de usuarios registrados en el sistema</CardDescription>
               </CardHeader>
               <CardContent className="pt-4">
                 {usersList.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse">
                       <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left py-2 px-3 font-medium text-gray-700">Nombre</th>
-                          <th className="text-left py-2 px-3 font-medium text-gray-700">Correo</th>
-                          <th className="text-left py-2 px-3 font-medium text-gray-700">Roles</th>
+                        <tr className="border-b border-gray-200 dark:border-gray-700">
+                          <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">Nombre</th>
+                          <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">Correo</th>
+                          <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">Roles</th>
                         </tr>
                       </thead>
                       <tbody>
                         {usersList.map((userItem) => (
-                          <tr key={userItem.id_usuario} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="py-3 px-3 font-medium text-gray-800">{userItem.primer_nombre} {userItem.primer_apellido}</td>
-                            <td className="py-3 px-3 text-gray-600">{userItem.correo}</td>
-                            <td className="py-3 px-3 text-gray-600 capitalize">{(userItem.roles || []).join(', ')}</td>
+                          <tr key={userItem.id_usuario} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                            <td className="py-3 px-3 font-medium text-gray-800 dark:text-gray-100">{userItem.primer_nombre} {userItem.primer_apellido}</td>
+                            <td className="py-3 px-3 text-gray-600 dark:text-gray-300">{userItem.correo}</td>
+                            <td className="py-3 px-3 text-gray-600 dark:text-gray-300 capitalize">{(userItem.roles || []).join(', ')}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                ) : (<p className="text-gray-500 italic">{loadingUsers ? "Cargando usuarios..." : "No se encontraron usuarios."}</p>)}
+                ) : (<p className="text-gray-500 dark:text-gray-400 italic">{loadingUsers ? "Cargando usuarios..." : "No se encontraron usuarios."}</p>)}
               </CardContent>
             </Card>
           )}
 
           <Tabs defaultValue="perfil" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 mb-6">
-              <TabsTrigger value="perfil" className="flex items-center justify-center gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white">
+            <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 mb-6 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg">
+              <TabsTrigger value="perfil" className="flex items-center justify-center gap-2 data-[state=active]:bg-teal-600 dark:data-[state=active]:bg-teal-600 data-[state=active]:text-white dark:data-[state=inactive]:text-gray-300">
                 <User className="h-4 w-4" /> <span className="hidden sm:inline">Perfil</span>
               </TabsTrigger>
-              <TabsTrigger value="notificaciones" className="flex items-center justify-center gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white">
-                <Bell className="h-4 w-4" /> <span className="hidden sm:inline">Notificaciones</span>
-              </TabsTrigger>
-              <TabsTrigger value="seguridad" className="flex items-center justify-center gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white">
+              <TabsTrigger value="seguridad" className="flex items-center justify-center gap-2 data-[state=active]:bg-teal-600 dark:data-[state=active]:bg-teal-600 data-[state=active]:text-white dark:data-[state=inactive]:text-gray-300">
                 <Shield className="h-4 w-4" /> <span className="hidden sm:inline">Seguridad</span>
               </TabsTrigger>
-              <TabsTrigger value="sistema" className="flex items-center justify-center gap-2 data-[state=active]:bg-teal-500 data-[state=active]:text-white">
+              <TabsTrigger value="sistema" className="flex items-center justify-center gap-2 data-[state=active]:bg-teal-600 dark:data-[state=active]:bg-teal-600 data-[state=active]:text-white dark:data-[state=inactive]:text-gray-300">
                 <Zap className="h-4 w-4" /> <span className="hidden sm:inline">Sistema</span>
               </TabsTrigger>
             </TabsList>
 
-            {/* === PESTAÑA PERFIL === */}
             <TabsContent value="perfil" className="w-full mt-0">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="border-teal-200 shadow-sm h-full">
-                  <CardHeader className="bg-teal-50">
-                    <CardTitle className="text-teal-700">Información Personal</CardTitle>
-                    <CardDescription>Actualice su información personal y de contacto</CardDescription>
+              <div className="grid grid-cols-1 gap-6">
+                <Card className="border-teal-200 dark:border-teal-700/50 shadow-sm h-full bg-white dark:bg-gray-800">
+                  <CardHeader className="bg-teal-50 dark:bg-teal-800/30 dark:border-b dark:border-teal-700/50">
+                    <CardTitle className="text-teal-700 dark:text-teal-300">Información Personal</CardTitle>
+                    <CardDescription className="dark:text-gray-400">Actualice su información personal y de contacto</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6 pt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="nombre">Nombre Completo</Label>
-                        <Input id="nombre" value={userForm.nombre} onChange={handleUserFormChange} className="border-gray-300 focus:border-teal-500 focus:ring-teal-500" />
+                        <Label htmlFor="nombre" className="dark:text-gray-300">Nombre Completo</Label>
+                        <Input id="nombre" value={userForm.nombre} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="email">Correo Electrónico</Label>
-                        <Input id="email" type="email" value={userForm.email} onChange={handleUserFormChange} className="border-gray-300 focus:border-teal-500 focus:ring-teal-500" />
+                        <Label htmlFor="email" className="dark:text-gray-300">Correo Electrónico</Label>
+                        <Input id="email" type="email" value={userForm.email} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="especialidad">Especialidad</Label>
+                        <Label htmlFor="especialidad" className="dark:text-gray-300">Especialidad</Label>
                         <Select value={userForm.especialidad} onValueChange={(value) => handleSelectChange("especialidad", value)}>
-                          <SelectTrigger id="especialidad" className="border-gray-300 focus:border-teal-500 focus:ring-teal-500"><SelectValue placeholder="Seleccione su especialidad" /></SelectTrigger>
-                          <SelectContent>
+                          <SelectTrigger id="especialidad" className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500"><SelectValue placeholder="Seleccione su especialidad" /></SelectTrigger>
+                          <SelectContent className="dark:bg-gray-800 dark:border-gray-700 dark:text-white">
                             <SelectItem value="radiologia">Radiología</SelectItem>
                             <SelectItem value="cardiologia">Cardiología</SelectItem>
-                            {/* ... más especialidades ... */}
                           </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="hospital">Hospital/Clínica</Label>
-                        <Input id="hospital" value={userForm.hospital} onChange={handleUserFormChange} className="border-gray-300 focus:border-teal-500 focus:ring-teal-500" />
+                        <Label htmlFor="hospital" className="dark:text-gray-300">Hospital/Clínica</Label>
+                        <Input id="hospital" value={userForm.hospital} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="telefono">Teléfono</Label>
-                      <Input id="telefono" value={userForm.telefono} onChange={handleUserFormChange} className="border-gray-300 focus:border-teal-500 focus:ring-teal-500" />
+                      <Label htmlFor="telefono" className="dark:text-gray-300">Teléfono</Label>
+                      <Input id="telefono" value={userForm.telefono} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
                     </div>
                   </CardContent>
-                  <CardFooter className="flex justify-end gap-4 bg-gray-50">
-                    <Button variant="outline">Cancelar</Button>
-                    <Button className="bg-teal-600 hover:bg-teal-700 text-white"><Save className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
-                  </CardFooter>
-                </Card>
-                <Card className="border-teal-200 shadow-sm h-full">
-                  <CardHeader className="bg-teal-50">
-                    <CardTitle className="text-teal-700">Cambiar Contraseña</CardTitle>
-                    <CardDescription>Actualice su contraseña para mantener la seguridad de su cuenta</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6 pt-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="currentPassword">Contraseña Actual</Label>
-                      <Input id="currentPassword" type="password" className="border-gray-300 focus:border-teal-500 focus:ring-teal-500" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="newPassword">Nueva Contraseña</Label>
-                      <Input id="newPassword" type="password" className="border-gray-300 focus:border-teal-500 focus:ring-teal-500" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Confirmar Nueva Contraseña</Label>
-                      <Input id="confirmPassword" type="password" className="border-gray-300 focus:border-teal-500 focus:ring-teal-500" />
-                    </div>
-                  </CardContent>
-                  <CardFooter className="flex justify-end gap-4 bg-gray-50">
-                    <Button variant="outline">Cancelar</Button>
-                    <Button className="bg-teal-600 hover:bg-teal-700 text-white"><Lock className="mr-2 h-4 w-4" /> Actualizar Contraseña</Button>
+                  <CardFooter className="flex justify-end gap-4 bg-gray-50 dark:bg-gray-700/50 dark:border-t dark:border-gray-600">
+                    <Button variant="outline" className="dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Cancelar</Button>
+                    <Button className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600"><Save className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
                   </CardFooter>
                 </Card>
               </div>
             </TabsContent>
 
-            {/* === PESTAÑA NOTIFICACIONES === */}
-            <TabsContent value="notificaciones" className="w-full mt-0">
-              <Card className="border-teal-200 shadow-sm">
-                <CardHeader className="bg-teal-50">
-                  <CardTitle className="text-teal-700">Preferencias de Notificaciones</CardTitle>
-                  <CardDescription>Configure cómo y cuándo recibir notificaciones</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-4">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold text-gray-800">Canales de Notificación</h3><Separator />
-                      <div className="flex items-center justify-between py-2">
-                        <div className="space-y-0.5"><Label htmlFor="email-notifications" className="text-base">Notificaciones por Email</Label><p className="text-sm text-gray-600">Recibir notificaciones importantes por correo electrónico</p></div>
-                        <Switch id="email-notifications" checked={notificaciones.email} onCheckedChange={(checked) => handleSwitchChange("email", checked)} className="data-[state=checked]:bg-teal-500" />
-                      </div> <Separator />
-                      <div className="flex items-center justify-between py-2">
-                        <div className="space-y-0.5"><Label htmlFor="system-notifications" className="text-base">Notificaciones del Sistema</Label><p className="text-sm text-gray-600">Recibir notificaciones dentro de la aplicación</p></div>
-                        <Switch id="system-notifications" checked={notificaciones.sistema} onCheckedChange={(checked) => handleSwitchChange("sistema", checked)} className="data-[state=checked]:bg-teal-500" />
-                      </div>
-                    </div>
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold text-gray-800">Tipos de Notificaciones</h3><Separator />
-                      <div className="flex items-center justify-between py-2">
-                        <div className="space-y-0.5"><Label htmlFor="new-features" className="text-base">Nuevas Funcionalidades</Label><p className="text-sm text-gray-600">Notificaciones sobre nuevas características del sistema</p></div>
-                        <Switch id="new-features" checked={notificaciones.nuevasFunciones} onCheckedChange={(checked) => handleSwitchChange("nuevasFunciones", checked)} className="data-[state=checked]:bg-teal-500" />
-                      </div> <Separator />
-                      <div className="flex items-center justify-between py-2">
-                        <div className="space-y-0.5"><Label htmlFor="weekly-reports" className="text-base">Reportes Semanales</Label><p className="text-sm text-gray-600">Recibir resumen semanal de actividad</p></div>
-                        <Switch id="weekly-reports" checked={notificaciones.reportesSemanal} onCheckedChange={(checked) => handleSwitchChange("reportesSemanal", checked)} className="data-[state=checked]:bg-teal-500" />
-                      </div> <Separator />
-                      <div className="flex items-center justify-between py-2">
-                        <div className="space-y-0.5"><Label htmlFor="monthly-reports" className="text-base">Reportes Mensuales</Label><p className="text-sm text-gray-600">Recibir resumen mensual de actividad</p></div>
-                        <Switch id="monthly-reports" checked={notificaciones.reportesMensual} onCheckedChange={(checked) => handleSwitchChange("reportesMensual", checked)} className="data-[state=checked]:bg-teal-500" />
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-                <CardFooter className="flex justify-end bg-gray-50">
-                  <Button className="bg-teal-600 hover:bg-teal-700 text-white"><Save className="mr-2 h-4 w-4" /> Guardar Preferencias</Button>
-                </CardFooter>
-              </Card>
-            </TabsContent>
-
-            {/* === PESTAÑA SEGURIDAD (CON MFA) === */}
             <TabsContent value="seguridad" className="w-full mt-0">
-              <Card className="border-teal-200 shadow-sm">
-                <CardHeader className="bg-teal-50">
-                  <CardTitle className="text-teal-700">Configuración de Seguridad Avanzada</CardTitle>
-                  <CardDescription>Gestione la autenticación de dos factores y otras opciones de seguridad.</CardDescription>
+              <Card className="border-teal-200 dark:border-teal-700/50 shadow-sm bg-white dark:bg-gray-800">
+                <CardHeader className="bg-teal-50 dark:bg-teal-800/30 dark:border-b dark:border-teal-700/50">
+                  <CardTitle className="text-teal-700 dark:text-teal-300">Configuración de Seguridad Avanzada</CardTitle>
+                  <CardDescription className="dark:text-gray-400">Gestione la autenticación de dos factores y otras opciones de seguridad.</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-8">
-                  <Alert className="border-amber-300 bg-amber-50 text-amber-800">
-                    <AlertCircle className="h-5 w-5 text-amber-600" /> <AlertTitle className="font-bold">Importante</AlertTitle>
+                  <Alert className="border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300">
+                    <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" /> <AlertTitle className="font-bold">Importante</AlertTitle>
                     <AlertDescription>Mantener una configuración de seguridad adecuada es esencial.</AlertDescription>
                   </Alert>
 
-                  <div> {/* Contenedor para la sección MFA */}
-                    <h3 className="text-xl font-semibold text-gray-800 mb-1">Autenticación de Dos Factores (MFA)</h3>
-                    <p className="text-sm text-gray-500 mb-4">Añade una capa extra de seguridad a tu cuenta usando una aplicación de autenticación TOTP.</p>
-                    <Separator className="mb-6" />
+                  <div> 
+                    <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-1">Autenticación de Dos Factores (MFA)</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Añade una capa extra de seguridad a tu cuenta usando una aplicación de autenticación TOTP.</p>
+                    <Separator className="mb-6 dark:bg-gray-700" />
 
-                    {mfaError && (<Alert variant="destructive" className="mb-4"><AlertCircle className="h-4 w-4" /><AlertTitle>Error de MFA</AlertTitle><AlertDescription>{mfaError}</AlertDescription></Alert>)}
-                    {mfaSuccessMessage && mfaCurrentStep === 'initial' && (<Alert variant="default" className="mb-4 bg-green-50 border-green-300 text-green-700"><CheckCircle className="h-4 w-4" /><AlertTitle>Éxito</AlertTitle><AlertDescription>{mfaSuccessMessage}</AlertDescription></Alert>)}
+                    {mfaError && (<Alert variant="destructive" className="mb-4 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300"><AlertCircle className="h-4 w-4" /><AlertTitle>Error de MFA</AlertTitle><AlertDescription>{mfaError}</AlertDescription></Alert>)}
+                    {mfaSuccessMessage && mfaCurrentStep === 'initial' && (<Alert variant="default" className="mb-4 bg-green-50 border-green-300 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300"><CheckCircle className="h-4 w-4" /><AlertTitle>Éxito</AlertTitle><AlertDescription>{mfaSuccessMessage}</AlertDescription></Alert>)}
 
-                    {/* Lógica de renderizado basada en isMfaEnabledForUser y mfaCurrentStep */}
                     {isMfaEnabledForUser && mfaCurrentStep === 'initial' && (
-                      <div className="text-center p-4 border border-green-200 bg-green-50 rounded-md">
-                        <CheckCircle className="h-10 w-10 text-green-600 mx-auto mb-2" />
-                        <p className="font-semibold text-green-700 mb-3">La Autenticación de Dos Factores está HABILITADA.</p>
-                        <Button onClick={handleDisableMfa} variant="outline" className="border-red-500 text-red-500 hover:bg-red-50 hover:text-red-600" disabled={isMfaLoading}>
+                      <div className="text-center p-4 border border-green-200 bg-green-50 dark:bg-green-900/30 dark:border-green-700 rounded-md">
+                        <CheckCircle className="h-10 w-10 text-green-600 dark:text-green-400 mx-auto mb-2" />
+                        <p className="font-semibold text-green-700 dark:text-green-300 mb-3">La Autenticación de Dos Factores está HABILITADA.</p>
+                        <Button onClick={handleDisableMfa} variant="outline" className="border-red-500 text-red-500 hover:bg-red-50 hover:text-red-600 dark:text-red-400 dark:border-red-600 dark:hover:bg-red-700/50 dark:hover:text-red-300" disabled={isMfaLoading}>
                           {isMfaLoading && mfaCurrentStep === 'initial' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Deshabilitar MFA
                         </Button>
                       </div>
@@ -510,61 +424,61 @@ export default function ConfiguracionPage() {
 
                     {!isMfaEnabledForUser && mfaCurrentStep === 'initial' && (
                       <div className="text-left">
-                        <p className="text-gray-600 mb-3">MFA no está activo para tu cuenta.</p>
-                        <Button onClick={handleInitiateMfaSetup} disabled={isMfaLoading} className="bg-teal-600 hover:bg-teal-700">
+                        <p className="text-gray-600 dark:text-gray-400 mb-3">MFA no está activo para tu cuenta.</p>
+                        <Button onClick={handleInitiateMfaSetup} disabled={isMfaLoading} className="bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600">
                           {isMfaLoading && mfaCurrentStep === 'initial' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />} Habilitar Autenticación de Dos Factores
                         </Button>
                       </div>
                     )}
 
                     {mfaCurrentStep === 'showQr' && otpauthUrl && (
-                      <div className="space-y-4 text-center p-4 border rounded-md bg-gray-50">
-                        <h4 className="text-lg font-semibold text-gray-700">Paso 1: Escanea el Código QR</h4>
-                        <p className="text-sm text-gray-600 max-w-md mx-auto">Usa tu aplicación de autenticación para escanear este código.</p>
+                      <div className="space-y-4 text-center p-4 border dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-800/50">
+                        <h4 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Paso 1: Escanea el Código QR</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto">Usa tu aplicación de autenticación para escanear este código.</p>
                         <div className="flex justify-center my-3"><QrCodeComponent data={otpauthUrl} /></div>
                         {manualSecret && (
-                          <div className="mt-3 p-3 bg-gray-100 rounded-md text-sm">
-                            <p className="font-medium text-gray-700">O ingresa manualmente este código en tu app:</p>
-                            <p className="font-mono text-teal-700 break-all bg-white p-2 my-1 rounded shadow-sm inline-block">{manualSecret}</p>
+                          <div className="mt-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-md text-sm">
+                            <p className="font-medium text-gray-700 dark:text-gray-300">O ingresa manualmente este código en tu app:</p>
+                            <p className="font-mono text-teal-700 dark:text-teal-400 break-all bg-white dark:bg-gray-600 p-2 my-1 rounded shadow-sm inline-block">{manualSecret}</p>
                           </div>
                         )}
                         <div className="mt-4 flex flex-col sm:flex-row justify-center gap-3">
-                          <Button variant="outline" onClick={() => { setMfaCurrentStep('initial'); setOtpauthUrl(null); setMfaError(null); setMfaSuccessMessage(null); }} disabled={isMfaLoading}>Cancelar</Button>
-                          <Button onClick={() => { setMfaCurrentStep('verify'); setMfaError(null); setMfaSuccessMessage(null); }} className="bg-teal-600 hover:bg-teal-700" disabled={isMfaLoading}>Siguiente: Verificar Código</Button>
+                          <Button variant="outline" onClick={() => { setMfaCurrentStep('initial'); setOtpauthUrl(null); setMfaError(null); setMfaSuccessMessage(null); }} disabled={isMfaLoading} className="dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Cancelar</Button>
+                          <Button onClick={() => { setMfaCurrentStep('verify'); setMfaError(null); setMfaSuccessMessage(null); }} className="bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600" disabled={isMfaLoading}>Siguiente: Verificar Código</Button>
                         </div>
                       </div>
                     )}
 
                     {mfaCurrentStep === 'verify' && (
-                      <form onSubmit={handleVerifyAndEnableMfa} className="space-y-4 p-4 border rounded-md bg-gray-50 max-w-md mx-auto">
-                        <h4 className="text-lg font-semibold text-gray-700 text-center">Paso 2: Verifica tu Código</h4>
-                        <p className="text-sm text-gray-600 text-center">Ingresa el código de 6 dígitos generado por tu aplicación.</p>
+                      <form onSubmit={handleVerifyAndEnableMfa} className="space-y-4 p-4 border dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-800/50 max-w-md mx-auto">
+                        <h4 className="text-lg font-semibold text-gray-700 dark:text-gray-200 text-center">Paso 2: Verifica tu Código</h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 text-center">Ingresa el código de 6 dígitos generado por tu aplicación.</p>
                         <div>
-                          <Label htmlFor="verificationCode" className="sr-only">Código de Verificación</Label>
-                          <Input id="verificationCode" type="text" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value.replace(/\s/g, ''))} placeholder="123 456" maxLength={7} pattern="\d{3}\s?\d{3}|\d{6}" required className="text-center text-2xl tracking-widest font-mono h-14 rounded-md" disabled={isMfaLoading} />
+                          <Label htmlFor="verificationCode" className="sr-only dark:text-gray-300">Código de Verificación</Label>
+                          <Input id="verificationCode" type="text" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value.replace(/\s/g, ''))} placeholder="123 456" maxLength={7} pattern="\d{3}\s?\d{3}|\d{6}" required className="text-center text-2xl tracking-widest font-mono h-14 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white" disabled={isMfaLoading} />
                         </div>
                         <div className="flex flex-col sm:flex-row gap-2 justify-end pt-2">
-                          <Button type="button" variant="outline" onClick={() => { setMfaCurrentStep('showQr'); setMfaError(null); }} disabled={isMfaLoading}>Atrás (Ver QR)</Button>
-                          <Button type="submit" disabled={isMfaLoading || verificationCode.replace(/\s/g, '').length !== 6} className="bg-teal-600 hover:bg-teal-700">
+                          <Button type="button" variant="outline" onClick={() => { setMfaCurrentStep('showQr'); setMfaError(null); }} disabled={isMfaLoading} className="dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Atrás (Ver QR)</Button>
+                          <Button type="submit" disabled={isMfaLoading || verificationCode.replace(/\s/g, '').length !== 6} className="bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600">
                             {isMfaLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Verificar y Activar MFA
                           </Button>
                         </div>
                       </form>
                     )}
                   </div>
-                  <Separator className="my-8" />
+                  <Separator className="my-8 dark:bg-gray-700" />
                   <div className="space-y-4">
-                    <h3 className="text-xl font-semibold text-gray-800">Sesiones</h3><Separator className="mb-6" />
+                    <h3 className="text-xl font-semibold text-gray-800 dark:text-white">Sesiones</h3><Separator className="mb-6 dark:bg-gray-700" />
                     <div className="flex items-center justify-between py-2">
-                      <div className="space-y-0.5"><Label htmlFor="auto-login" className="text-base font-medium">Inicio de Sesión Automático</Label><p className="text-sm text-gray-600">Mantener la sesión iniciada en este dispositivo.</p></div>
-                      <Switch id="auto-login" checked={seguridad.sesionAutomatica} onCheckedChange={(checked) => handleSwitchChange("sesionAutomatica", checked)} className="data-[state=checked]:bg-teal-500" />
-                    </div> <Separator />
+                      <div className="space-y-0.5"><Label htmlFor="auto-login" className="text-base font-medium dark:text-gray-200">Inicio de Sesión Automático</Label><p className="text-sm text-gray-600 dark:text-gray-400">Mantener la sesión iniciada en este dispositivo.</p></div>
+                      <Switch id="auto-login" checked={seguridad.sesionAutomatica} onCheckedChange={(checked) => handleSwitchChange("sesionAutomatica", checked)} className="data-[state=checked]:bg-teal-600 dark:data-[state=checked]:bg-teal-500" />
+                    </div> <Separator className="dark:bg-gray-700"/>
                     <div className="space-y-2 py-2">
-                      <Label htmlFor="session-timeout" className="text-base font-medium">Tiempo de Inactividad para Cierre de Sesión</Label>
-                      <p className="text-sm text-gray-600">Tiempo en minutos antes de cerrar la sesión por inactividad.</p>
+                      <Label htmlFor="session-timeout" className="text-base font-medium dark:text-gray-200">Tiempo de Inactividad para Cierre de Sesión</Label>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Tiempo en minutos antes de cerrar la sesión por inactividad.</p>
                       <Select value={seguridad.tiempoSesion} onValueChange={(value) => handleSelectChange("tiempoSesion", value)}>
-                        <SelectTrigger id="session-timeout" className="border-gray-300 focus:border-teal-500 focus:ring-teal-500"><SelectValue placeholder="Seleccionar tiempo" /></SelectTrigger>
-                        <SelectContent>
+                        <SelectTrigger id="session-timeout" className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500"><SelectValue placeholder="Seleccionar tiempo" /></SelectTrigger>
+                        <SelectContent className="dark:bg-gray-800 dark:border-gray-700 dark:text-white">
                           <SelectItem value="5">5 minutos</SelectItem>
                           <SelectItem value="15">15 minutos</SelectItem>
                           <SelectItem value="30">30 minutos</SelectItem>
@@ -575,44 +489,48 @@ export default function ConfiguracionPage() {
                     </div>
                   </div>
                 </CardContent>
-                <CardFooter className="flex justify-end bg-gray-50">
-                  <Button className="bg-teal-600 hover:bg-teal-700 text-white"><Save className="mr-2 h-4 w-4" /> Guardar Configuración de Seguridad</Button>
+                <CardFooter className="flex justify-end bg-gray-50 dark:bg-gray-700/50 dark:border-t dark:border-gray-600">
+                  <Button className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600"><Save className="mr-2 h-4 w-4" /> Guardar Configuración de Seguridad</Button>
                 </CardFooter>
               </Card>
             </TabsContent>
 
-            {/* === PESTAÑA SISTEMA === */}
             <TabsContent value="sistema" className="w-full mt-0">
-              <Card className="border-teal-200 shadow-sm">
-                <CardHeader className="bg-teal-50">
-                  <CardTitle className="text-teal-700">Configuración del Sistema</CardTitle>
-                  <CardDescription>Personalice la apariencia y el comportamiento del sistema</CardDescription>
+              <Card className="border-teal-200 dark:border-teal-700/50 shadow-sm bg-white dark:bg-gray-800">
+                <CardHeader className="bg-teal-50 dark:bg-teal-800/30 dark:border-b dark:border-teal-700/50">
+                  <CardTitle className="text-teal-700 dark:text-teal-300">Configuración del Sistema</CardTitle>
+                  <CardDescription className="dark:text-gray-400">Personalice la apariencia y el comportamiento del sistema</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-4">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="space-y-4">
-                      <h3 className="text-lg font-semibold text-gray-800">Apariencia</h3><Separator />
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Apariencia</h3><Separator className="dark:bg-gray-700"/>
                       <div className="flex items-center justify-between py-2">
-                        <div className="space-y-0.5"><Label htmlFor="dark-mode" className="text-base">Tema Oscuro</Label><p className="text-sm text-gray-600">Cambiar a modo oscuro para reducir la fatiga visual</p></div>
-                        <Switch id="dark-mode" checked={sistema.temaOscuro} onCheckedChange={(checked) => handleSwitchChange("temaOscuro", checked)} className="data-[state=checked]:bg-teal-500" />
-                      </div> <Separator />
+                        <div className="space-y-0.5"><Label htmlFor="dark-mode" className="text-base dark:text-gray-200">Tema Oscuro</Label><p className="text-sm text-gray-600 dark:text-gray-400">Cambiar a modo oscuro para reducir la fatiga visual</p></div>
+                        <Switch
+                          id="dark-mode"
+                          checked={sistema.temaOscuro} // This now reflects the theme from next-themes via useEffect
+                          onCheckedChange={(checked) => handleSwitchChange("temaOscuro", checked)}
+                          className="data-[state=checked]:bg-teal-600 dark:data-[state=checked]:bg-teal-500"
+                        />
+                      </div> <Separator className="dark:bg-gray-700"/>
                       <div className="flex items-center justify-between py-2">
-                        <div className="space-y-0.5"><Label htmlFor="high-res" className="text-base">Alta Resolución de Imágenes</Label><p className="text-sm text-gray-600">Mostrar imágenes médicas en alta resolución</p></div>
-                        <Switch id="high-res" checked={sistema.altaResolucion} onCheckedChange={(checked) => handleSwitchChange("altaResolucion", checked)} className="data-[state=checked]:bg-teal-500" />
+                        <div className="space-y-0.5"><Label htmlFor="high-res" className="text-base dark:text-gray-200">Alta Resolución de Imágenes</Label><p className="text-sm text-gray-600 dark:text-gray-400">Mostrar imágenes médicas en alta resolución</p></div>
+                        <Switch id="high-res" checked={sistema.altaResolucion} onCheckedChange={(checked) => handleSwitchChange("altaResolucion", checked)} className="data-[state=checked]:bg-teal-600 dark:data-[state=checked]:bg-teal-500" />
                       </div>
                     </div>
                     <div className="space-y-4">
-                      <h3 className="text-lg font-semibold text-gray-800">Comportamiento</h3><Separator />
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Comportamiento</h3><Separator className="dark:bg-gray-700"/>
                       <div className="flex items-center justify-between py-2">
-                        <div className="space-y-0.5"><Label htmlFor="auto-save" className="text-base">Guardado Automático</Label><p className="text-sm text-gray-600">Guardar automáticamente los diagnósticos en progreso</p></div>
-                        <Switch id="auto-save" checked={sistema.autoGuardado} onCheckedChange={(checked) => handleSwitchChange("autoGuardado", checked)} className="data-[state=checked]:bg-teal-500" />
-                      </div> <Separator />
+                        <div className="space-y-0.5"><Label htmlFor="auto-save" className="text-base dark:text-gray-200">Guardado Automático</Label><p className="text-sm text-gray-600 dark:text-gray-400">Guardar automáticamente los diagnósticos en progreso</p></div>
+                        <Switch id="auto-save" checked={sistema.autoGuardado} onCheckedChange={(checked) => handleSwitchChange("autoGuardado", checked)} className="data-[state=checked]:bg-teal-600 dark:data-[state=checked]:bg-teal-500" />
+                      </div> <Separator className="dark:bg-gray-700"/>
                       <div className="space-y-2 py-2">
-                        <Label htmlFor="auto-save-time" className="text-base">Intervalo de Guardado Automático</Label>
-                        <p className="text-sm text-gray-600">Tiempo en minutos entre guardados automáticos</p>
+                        <Label htmlFor="auto-save-time" className="text-base dark:text-gray-200">Intervalo de Guardado Automático</Label>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Tiempo en minutos entre guardados automáticos</p>
                         <Select value={sistema.tiempoAutoGuardado} onValueChange={(value) => handleSelectChange("tiempoAutoGuardado", value)}>
-                          <SelectTrigger id="auto-save-time" className="border-gray-300 focus:border-teal-500 focus:ring-teal-500"><SelectValue placeholder="Seleccionar intervalo" /></SelectTrigger>
-                          <SelectContent>
+                          <SelectTrigger id="auto-save-time" className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500"><SelectValue placeholder="Seleccionar intervalo" /></SelectTrigger>
+                          <SelectContent className="dark:bg-gray-800 dark:border-gray-700 dark:text-white">
                             <SelectItem value="1">1 minuto</SelectItem>
                             <SelectItem value="3">3 minutos</SelectItem>
                             <SelectItem value="5">5 minutos</SelectItem>
@@ -622,22 +540,9 @@ export default function ConfiguracionPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-4 mt-6">
-                    <h3 className="text-lg font-semibold text-gray-800">Almacenamiento</h3><Separator />
-                    <div className="space-y-2 py-2">
-                      <Label className="text-base">Uso de Almacenamiento</Label>
-                      <div className="rounded-md border border-gray-200 p-4 bg-gray-50">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3"><Database className="h-5 w-5 text-teal-600" /><span className="font-medium text-gray-800">Espacio Utilizado</span></div>
-                          <span className="font-semibold text-gray-800">1.2 GB / 5 GB</span> {/* Ejemplo de datos */}
-                        </div>
-                        <div className="mt-3 h-2 w-full rounded-full bg-gray-300"><div className="h-2 w-[24%] rounded-full bg-teal-600"></div></div> {/* Ejemplo de barra */}
-                      </div>
-                    </div>
-                  </div>
                 </CardContent>
-                <CardFooter className="flex justify-end bg-gray-50">
-                  <Button className="bg-teal-600 hover:bg-teal-700 text-white"><Save className="mr-2 h-4 w-4" /> Guardar Configuración</Button>
+                <CardFooter className="flex justify-end bg-gray-50 dark:bg-gray-700/50 dark:border-t dark:border-gray-600">
+                  <Button className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600"><Save className="mr-2 h-4 w-4" /> Guardar Configuración</Button>
                 </CardFooter>
               </Card>
             </TabsContent>

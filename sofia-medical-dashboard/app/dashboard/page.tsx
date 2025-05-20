@@ -223,7 +223,24 @@ export default function DashboardPage() {
   const isLoadingMetrics = loading && (!diagnosticos.length || !pacientes.length);
 
 
-  const precisionPromedio = 92.5; 
+  const precisionPromedio = useMemo(() => {
+    if (!diagnosticos.length) return 0;
+    
+    const confianzas = diagnosticos
+      .map(d => {
+        const valor = d.nivel_confianza;
+        if (valor === null) return null;
+        // Asegurar que el valor esté entre 0 y 1
+        return Math.min(Math.max(valor, 0), 1);
+      })
+      .filter((n): n is number => n !== null);
+      
+    if (!confianzas.length) return 0;
+    
+    const promedio = confianzas.reduce((a, b) => a + b, 0) / confianzas.length;
+    const porcentaje = Math.min(promedio * 100, 100); // Limitar máximo a 100%
+    return Number(porcentaje.toFixed(2));
+  }, [diagnosticos]);
 
   const diagnosticosRecientes = [...diagnosticos]
     .sort((a, b) => dayjs(b.fecha_diagnostico).valueOf() - dayjs(a.fecha_diagnostico).valueOf())
@@ -233,8 +250,8 @@ export default function DashboardPage() {
     <div className="space-y-6 w-full px-4 sm:px-6 py-8 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-800">Dashboard Principal</h1>
-            <p className="text-gray-600 mt-1">Bienvenido de nuevo, {user?.primer_nombre || "Usuario"}.</p>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-800 dark:text-white">Dashboard Principal</h1>
+            <p className="text-gray-600 dark:text-white mt-1">Bienvenido de nuevo, {user?.primer_nombre || "Usuario"}.</p>
         </div>
         <div className="flex items-center gap-2">
             <img src="/Logo_sofia.png" alt="Logo de SOFIA AI" className="h-9" />
@@ -247,69 +264,69 @@ export default function DashboardPage() {
           { title: "Diagnósticos Totales", value: isLoadingMetrics ? <Loader2 className="h-5 w-5 animate-spin" /> : (diagnosticos.length.toLocaleString()), icon: <Activity className="h-5 w-5 text-teal-600" />, description: "Total acumulado en el sistema" },
           { title: "Pacientes Registrados", value: isLoadingMetrics ? <Loader2 className="h-5 w-5 animate-spin" /> : pacientes.length.toLocaleString(), icon: <Users className="h-5 w-5 text-teal-600" />, description: "Pacientes únicos activos" },
           { title: "Tiempo Promedio Diag.", value: isLoadingMetrics ? <Loader2 className="h-5 w-5 animate-spin" /> : "2.4s", icon: <Clock className="h-5 w-5 text-teal-600" />, description: "Estimado por análisis IA" },
-          { title: "Precisión IA (Simulada)", value: isLoadingMetrics ? <Loader2 className="h-5 w-5 animate-spin" /> : `${precisionPromedio}%`, icon: <BarChart3 className="h-5 w-5 text-teal-600" />, description: "Basada en modelos de prueba" },
+          { title: "Precisión IA (promedio)", value: isLoadingMetrics ? <Loader2 className="h-5 w-5 animate-spin" /> : `${precisionPromedio}%`, icon: <BarChart3 className="h-5 w-5 text-teal-600" />, description: "Promedio de confianza en diagnósticos" },
         ].map((metric, idx) => (
-          <Card key={idx} className="border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+          <Card key={idx} className="border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md transition-shadow dark:bg-gray-800">
             <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
-              <CardTitle className="text-sm font-semibold text-gray-700">{metric.title}</CardTitle>
+              <CardTitle className="text-sm font-semibold text-gray-700 dark:text-white">{metric.title}</CardTitle>
               {metric.icon}
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              <div className="text-3xl font-bold text-gray-900">{metric.value}</div>
-              <p className="text-xs text-gray-500 mt-1">{metric.description}</p>
+              <div className="text-3xl font-bold text-gray-900 dark:text-white">{metric.value}</div>
+              <p className="text-xs text-gray-500 dark:text-gray-300 mt-1">{metric.description}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
       <Tabs defaultValue="recientes" className="space-y-4">
-        <TabsList className="bg-gray-100 p-1 rounded-lg">
-          <TabsTrigger value="recientes" className="data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-sm px-4 py-2 text-sm font-medium">
+        <TabsList className="bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+          <TabsTrigger value="recientes" className="data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-sm px-4 py-2 text-sm font-medium dark:data-[state=active]:bg-gray-900 dark:data-[state=active]:text-white dark:text-gray-400">
             Diagnósticos Recientes
           </TabsTrigger>
-          <TabsTrigger value="estadisticas" className="data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-sm px-4 py-2 text-sm font-medium">
+          <TabsTrigger value="estadisticas" className="data-[state=active]:bg-white data-[state=active]:text-teal-700 data-[state=active]:shadow-sm px-4 py-2 text-sm font-medium dark:data-[state=active]:bg-gray-900 dark:data-[state=active]:text-white dark:text-gray-400">
             Estadísticas
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="recientes" className="space-y-4">
           <Card className="border-gray-200 rounded-lg shadow-sm">
-            <CardHeader className="px-4 py-3 sm:px-6 sm:py-4 border-b">
-              <CardTitle className="text-lg font-semibold text-gray-800">Últimos Diagnósticos</CardTitle>
-              <CardDescription className="text-sm text-gray-500">Los 5 diagnósticos más recientes.</CardDescription>
+            <CardHeader className="px-4 py-3 sm:px-6 sm:py-4 border-b dark:border-gray-700">
+              <CardTitle className="text-lg font-semibold text-gray-800 dark:text-white">Últimos Diagnósticos</CardTitle>
+              <CardDescription className="text-sm text-gray-500 dark:text-gray-300">Los 5 diagnósticos más recientes.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <div className="space-y-0">
                 {loading ? (
-                  <div className="h-40 flex items-center justify-center text-gray-500">
+                  <div className="h-40 flex items-center justify-center text-gray-500 dark:text-gray-300">
                       <Loader2 className="h-6 w-6 animate-spin mr-2" /> Cargando diagnósticos...
                   </div>
                 ) : diagnosticosRecientes.length > 0 ? (
                   diagnosticosRecientes.map((diag) => ( 
-                    <div key={diag.id_diagnostico} className="flex items-center gap-4 p-3 sm:p-4 border-b last:border-b-0 hover:bg-gray-50/50 transition-colors">
-                      <div className="h-10 w-10 rounded-md bg-teal-100 flex items-center justify-center flex-shrink-0">
-                        <TrendingUp className="h-5 w-5 text-teal-600" />
+                    <div key={diag.id_diagnostico} className="flex items-center gap-4 p-3 sm:p-4 border-b last:border-b-0 hover:bg-gray-50/50 transition-colors dark:border-gray-700 dark:hover:bg-gray-700/50">
+                      <div className="h-10 w-10 rounded-md bg-teal-100 dark:bg-teal-800 flex items-center justify-center flex-shrink-0">
+                        <TrendingUp className="h-5 w-5 text-teal-600 dark:text-teal-400" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-gray-800 truncate">
+                        <div className="font-medium text-sm text-gray-800 dark:text-white truncate">
                           Paciente: {diag.nombre_paciente || "N/A"}
                         </div>
-                        <div className="text-xs text-gray-500 truncate">
+                        <div className="text-xs text-gray-500 dark:text-gray-300 truncate">
                           {diag.nombre_tipo_examen || "Examen no especificado"} - {diag.resultado || "Resultado pendiente"}
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0 ml-2">
-                        <div className={`text-sm font-semibold ${ diag.nivel_confianza && diag.nivel_confianza >= 0.8 ? 'text-green-600' : diag.nivel_confianza && diag.nivel_confianza >=0.5 ? 'text-yellow-600' : diag.nivel_confianza !== null ? 'text-red-600' : 'text-gray-500' }`}>
+                        <div className={`text-sm font-semibold ${ diag.nivel_confianza && diag.nivel_confianza >= 0.8 ? 'text-green-600 dark:text-green-400' : diag.nivel_confianza && diag.nivel_confianza >=0.5 ? 'text-yellow-600 dark:text-yellow-400' : diag.nivel_confianza !== null ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-300' }`}>
                             {diag.nivel_confianza !== null ? `${(diag.nivel_confianza * 100).toFixed(0)}%` : "N/A"}
                         </div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-gray-400 dark:text-gray-500">
                             {dayjs(diag.fecha_diagnostico).format('DD MMM YY')} 
                         </div>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="h-40 flex items-center justify-center text-gray-500">
+                  <div className="h-40 flex items-center justify-center text-gray-500 dark:text-gray-300">
                     No hay diagnósticos recientes para mostrar.
                   </div>
                 )}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Fragment } from "react"
+import { useState, useEffect, Fragment, useRef } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
@@ -9,7 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-// import { Separator } from "@/components/ui/separator"; // No se usa directamente
 import {
   Dialog,
   DialogContent,
@@ -42,7 +41,9 @@ import {
   Trash2
 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
+import { generateDiagnosisPDF, type DiagnosisReportData } from "@/lib/generate-pdf"
 
+// Interfaces
 interface DiagnosticoHistorial {
   id_diagnostico: number;
   id_paciente: number;
@@ -104,8 +105,10 @@ export default function HistorialPage() {
   const [modalLoading, setModalLoading] = useState(false)
   const [modalError, setModalError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const itemsPerPage = 10
+  const imageToCaptureRef = useRef<HTMLImageElement>(null);
 
   const loadDiagnosticos = async () => {
     setLoadingDiagnosticos(true)
@@ -197,6 +200,7 @@ export default function HistorialPage() {
 
   const handleExport = () => {
     console.log("Exportando datos:", sortedDiagnosticos);
+    // Replace alert with a more robust notification system if available
     alert("Funcionalidad de exportación pendiente.")
   }
 
@@ -212,15 +216,6 @@ export default function HistorialPage() {
       const data = await response.json();
 
       console.log(`[FRONTEND handleViewDiagnostico] Respuesta de API para ID ${id_diagnostico} - Status: ${response.status}`);
-      console.log("[FRONTEND handleViewDiagnostico] Datos recibidos del backend:", JSON.stringify(data, null, 2));
-      if (data && data.imagen_url) {
-        console.log(`[FRONTEND handleViewDiagnostico] imagen_url recibida (primeros 100 chars): ${String(data.imagen_url).substring(0, 100)}...`);
-        console.log(`[FRONTEND handleViewDiagnostico] imagen_url longitud: ${String(data.imagen_url).length}`);
-      } else {
-        console.log(`[FRONTEND handleViewDiagnostico] imagen_url NO recibida o es null.`);
-      }
-      console.log(`[FRONTEND handleViewDiagnostico] imagen_tipo recibido: ${data?.imagen_tipo}`);
-
       if (response.ok) {
         if (data && typeof data === 'object' && !Array.isArray(data)) {
           setSelectedDiagnostico(data as DiagnosticoDetallado);
@@ -241,6 +236,7 @@ export default function HistorialPage() {
   };
 
   const handleDeleteDiagnostico = async (id_diagnostico: number) => {
+    // Replace window.confirm with a custom modal for better UX
     if (!window.confirm(`¿Está seguro de que desea eliminar el diagnóstico ID ${id_diagnostico}? Esta acción no se puede deshacer y eliminará todos los datos asociados.`)) {
       return;
     }
@@ -250,7 +246,7 @@ export default function HistorialPage() {
       const responseData = await response.json();
       if (response.ok) {
         setDiagnosticos(prev => prev.filter(d => d.id_diagnostico !== id_diagnostico));
-        // Consider using a toast notification here instead of alert for better UX
+        // Replace alert with a more robust notification system
         alert(responseData.message || `Diagnóstico ID ${id_diagnostico} eliminado.`);
         if (isModalOpen && selectedDiagnostico?.id_diagnostico === id_diagnostico) {
           setIsModalOpen(false);
@@ -266,6 +262,52 @@ export default function HistorialPage() {
     }
   };
 
+  const handleDownloadPDFFromModal = async () => {
+    if (!selectedDiagnostico) {
+      setModalError("No hay diagnóstico seleccionado para generar el PDF.");
+      return;
+    }
+    setPdfLoading(true);
+    setModalError(null);
+
+    try {
+      const reportData: DiagnosisReportData = {
+        patientInfo: {
+          id: selectedDiagnostico.id_paciente?.toString() || "N/A",
+          name: selectedDiagnostico.nombre_paciente || "Paciente Desconocido",
+          nui: selectedDiagnostico.nui_paciente || "N/A",
+          examDate: selectedDiagnostico.fecha_diagnostico ? formatDate(selectedDiagnostico.fecha_diagnostico) : "Fecha Desconocida",
+        },
+        diagnosis: {
+          condition: selectedDiagnostico.resultado || "No especificado",
+          confidence: selectedDiagnostico.nivel_confianza,
+          description: selectedDiagnostico.ai_descripcion_detallada || undefined,
+          recomendaciones: selectedDiagnostico.recomendaciones?.map(r => r.descripcion) || [],
+          pronostico: (selectedDiagnostico.ai_pronostico_tiempo_recuperacion || selectedDiagnostico.ai_pronostico_probabilidad_mejoria) ? {
+            tiempo_recuperacion: selectedDiagnostico.ai_pronostico_tiempo_recuperacion || undefined,
+            probabilidad_mejoria: selectedDiagnostico.ai_pronostico_probabilidad_mejoria || undefined,
+          } : undefined,
+        },
+        imageFileName: typeof selectedDiagnostico.imagen_url === 'string' && !selectedDiagnostico.imagen_url.startsWith('data:') ? selectedDiagnostico.imagen_url : `imagen_diagnostico_${selectedDiagnostico.id_diagnostico}`,
+        examType: selectedDiagnostico.nombre_tipo_examen || "No especificado",
+      };
+
+      console.log("Generando PDF para historial con datos:", reportData);
+      console.log("Elemento a capturar para imagen (ref):", imageToCaptureRef.current);
+
+      const pdf = await generateDiagnosisPDF(reportData, imageToCaptureRef.current || undefined);
+      pdf.save(`diagnostico_historial_${selectedDiagnostico.id_diagnostico}_${reportData.patientInfo.name.replace(/\s+/g, '_')}.pdf`);
+      console.log("PDF de historial generado y descarga iniciada.");
+
+    } catch (error: any) {
+      console.error("Error al generar el PDF del historial:", error);
+      setModalError(`Error al generar el PDF: ${error.message || "Error desconocido."}`);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+
   const resetFilters = () => {
     setSearchTerm(""); setFiltroTipoExamen(""); setSortConfig(null); setCurrentPage(1);
   }
@@ -274,7 +316,8 @@ export default function HistorialPage() {
     if (!dateString) return "—";
     try {
       const date = new Date(dateString);
-      if (options && options.month === 'long') {
+      // Specific format for modal title description
+      if (options && options.month === 'long' && options.year === 'numeric' && options.day === 'numeric' && options.hour && options.minute) {
         const dia = date.getDate().toString().padStart(2, '0');
         const mes = date.toLocaleDateString('es-CO', { month: 'long' });
         const año = date.getFullYear();
@@ -282,11 +325,12 @@ export default function HistorialPage() {
         const minutos = date.getMinutes().toString().padStart(2, '0');
         return `${dia} de ${mes} de ${año}, ${hora}:${minutos}`;
       }
+      // Default short format for table
       const defaultShortOptions: Intl.DateTimeFormatOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
       return date.toLocaleDateString('es-CO', options || defaultShortOptions);
     } catch (e) {
       console.warn("Error al formatear fecha:", dateString, e);
-      return dateString;
+      return dateString; // Return original string if formatting fails
     }
   }
 
@@ -295,102 +339,71 @@ export default function HistorialPage() {
     return `${(confidence * 100).toFixed(0)}%`;
   };
 
-  // --- START OF UPDATED getImageUrlFromDetails FUNCTION ---
   const getImageUrlFromDetails = (
     imageUrl: string | null,
     imageType: string | null
   ): string => {
     console.log(`[FRONTEND getImageUrlFromDetails] URL recibida (raw): "${imageUrl ? String(imageUrl).substring(0, 60) + "..." : "null"}", Tipo: ${imageType}`);
-
     const placeholderImg = 'https://placehold.co/600x400/e2e8f0/94a3b8?text=Imagen+no+disponible';
-
     if (!imageUrl) {
       console.warn('[FRONTEND getImageUrlFromDetails] imageUrl es nulo. Usando placeholder.');
       return placeholderImg;
     }
-
     let imageUrlString = String(imageUrl).trim();
-
-    // Remover comillas si la cadena Base64 viene entrecomillada
+    // Remove surrounding quotes if any
     if ((imageUrlString.startsWith('"') && imageUrlString.endsWith('"')) ||
       (imageUrlString.startsWith("'") && imageUrlString.endsWith("'"))) {
       imageUrlString = imageUrlString.substring(1, imageUrlString.length - 1);
-      console.log('[FRONTEND getImageUrlFromDetails] Comillas removidas de la cadena Base64.');
     }
-
-    // 1. Si ya es un Data URI completo
+    // If it's already a data URI
     if (imageUrlString.startsWith('data:image')) {
-      console.log('[FRONTEND getImageUrlFromDetails] Es un Data URI completo. Devolviendo tal cual.');
       return imageUrlString;
     }
-
-    // 2. Si es una URL HTTP/HTTPS
+    // If it's a full URL
     if (imageUrlString.startsWith('http://') || imageUrlString.startsWith('https://')) {
-      console.log('[FRONTEND getImageUrlFromDetails] Es una URL HTTP/S. Devolviendo tal cual.');
       return imageUrlString;
     }
-
-    // 3. Si se proporciona imageType, se asume que imageUrlString es Base64 puro y se construye el Data URI
+    // If it's base64 data and we have a type
     if (imageType) {
-      let mimeType = 'image/jpeg'; // Fallback por defecto
+      let mimeType = 'image/jpeg'; // Default MIME type
       const tipoLimpio = String(imageType).toLowerCase().trim();
+      if (tipoLimpio === 'jpg' || tipoLimpio === 'jpeg') mimeType = 'image/jpeg';
+      else if (tipoLimpio === 'png') mimeType = 'image/png';
+      else if (tipoLimpio === 'gif') mimeType = 'image/gif';
+      else if (tipoLimpio === 'webp') mimeType = 'image/webp';
+      else if (tipoLimpio === 'dicom') mimeType = 'image/png'; // Convert DICOM to PNG for display if needed, or handle appropriately
+      else if (tipoLimpio.startsWith('image/')) mimeType = tipoLimpio;
 
-      if (tipoLimpio === 'jpg' || tipoLimpio === 'jpeg') {
-        mimeType = 'image/jpeg';
-      } else if (tipoLimpio === 'png') {
-        mimeType = 'image/png';
-      } else if (tipoLimpio === 'gif') {
-        mimeType = 'image/gif';
-      } else if (tipoLimpio === 'webp') {
-        mimeType = 'image/webp';
-      } else if (tipoLimpio === 'dicom') { // Caso específico del usuario para DICOM
-        mimeType = 'image/png';
-        console.log('[FRONTEND getImageUrlFromDetails] Tipo DICOM detectado, se usará image/png como MimeType.');
-      } else if (tipoLimpio.startsWith('image/')) { // Si ya viene el MimeType completo
-        mimeType = tipoLimpio;
-      } else {
-        console.warn(`[FRONTEND getImageUrlFromDetails] Tipo de imagen '${imageType}' no reconocido. Usando fallback '${mimeType}'.`);
-      }
-
-      // imageUrlString ya está "limpia" (sin comillas y trim)
       const dataUri = `data:${mimeType};base64,${imageUrlString}`;
-
-      console.log(`[FRONTEND getImageUrlFromDetails] Base64 detectada (imageType proporcionado). MimeType: ${mimeType}. Construyendo Data URI.`);
-      console.log('[FRONTEND getImageUrlFromDetails] Data URI construido (primeros 100 chars):', dataUri.substring(0, 100) + '...');
       return dataUri;
     }
-
-    // 4. No se proporcionó imageType. Se verifica si es una ruta local.
-    // Esto es crucial: se ejecuta DESPUÉS de la verificación de imageType,
-    // por lo que una cadena Base64 que comience con '/' pero tenga imageType será manejada por el bloque anterior.
+    // If it's a relative path (e.g., /uploads/image.jpg)
     if (imageUrlString.startsWith('/')) {
-      console.log('[FRONTEND getImageUrlFromDetails] Parece una ruta local (inicia con "/") y NO hay imageType. Devolviendo tal cual:', imageUrlString);
+      // Assuming it's served from the same domain, this should work
       return imageUrlString;
     }
-
-    // 5. Caso ambiguo: no es Data URI, no es HTTP/S, no tiene imageType, y no comienza con '/'.
-    console.warn(`[FRONTEND getImageUrlFromDetails] No se pudo determinar el tipo de URL (no es Data URI, HTTP/S, ni ruta local reconocida) Y NO se proporcionó imageType. URL: ${imageUrlString.substring(0, 100)}... Usando placeholder.`);
+    // Fallback if we can't determine the type or format
+    console.warn('[FRONTEND getImageUrlFromDetails] No se pudo determinar el formato de la imagen. Usando placeholder.');
     return placeholderImg;
   };
-  // --- END OF UPDATED getImageUrlFromDetails FUNCTION ---
 
   return (
-    <div className="w-full h-full py-8 px-4 sm:px-6 space-y-8 bg-slate-50">
-      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-gray-200">
+    <div className="w-full h-full py-8 px-4 sm:px-6 space-y-8 bg-slate-50 dark:bg-gray-900">
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-gray-200 dark:border-gray-700">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Historial de Diagnósticos</h1>
-          <p className="text-gray-500 mt-1">Consulte y gestione los diagnósticos médicos realizados</p>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Historial de Diagnósticos</h1>
+          <p className="text-gray-500 dark:text-gray-300 mt-1">Consulte y gestione los diagnósticos médicos realizados</p>
         </div>
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
             onClick={resetFilters}
-            className="border-gray-300 text-gray-700 hover:bg-gray-50 rounded-md"
+            className="border-gray-300 text-gray-700 hover:bg-gray-50 rounded-md dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Reiniciar Filtros
           </Button>
-          <Button onClick={handleExport} className="bg-teal-600 hover:bg-teal-700 text-white rounded-md">
+          <Button onClick={handleExport} className="bg-teal-600 hover:bg-teal-700 text-white rounded-md dark:bg-teal-700 dark:hover:bg-teal-800">
             <FileDown className="h-4 w-4 mr-2" />
             Exportar
           </Button>
@@ -400,46 +413,46 @@ export default function HistorialPage() {
       {authLoading ? (
         <div className="flex flex-col items-center justify-center w-full h-64 gap-4">
           <Loader2 className="h-8 w-8 text-teal-600 animate-spin" />
-          <p className="text-gray-500">Cargando...</p>
+          <p className="text-gray-500 dark:text-gray-300">Cargando...</p>
         </div>
       ) : error ? (
-        <Alert variant="destructive" className="border-red-200 bg-red-50 text-red-700">
+        <Alert variant="destructive" className="border-red-200 bg-red-50 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle className="font-semibold">Error al Cargar Datos</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
-          <Button variant="outline" size="sm" onClick={loadDiagnosticos} className="mt-4 border-red-300 text-red-700 hover:bg-red-100">
+          <Button variant="outline" size="sm" onClick={loadDiagnosticos} className="mt-4 border-red-300 text-red-700 hover:bg-red-100 dark:border-red-600 dark:text-red-300 dark:hover:bg-red-800">
             <RefreshCw className="h-4 w-4 mr-2" /> Reintentar
           </Button>
         </Alert>
       ) : (
         <Fragment>
-          <Card className="border-gray-200 shadow-sm w-full">
-            <CardHeader className="bg-gray-50 border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
-              <CardTitle className="flex items-center text-lg font-semibold text-gray-800">
-                <Filter className="h-5 w-5 mr-2 text-gray-500" />
+          <Card className="border-gray-200 dark:border-gray-700 shadow-sm w-full dark:bg-gray-800">
+            <CardHeader className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 px-4 py-3 sm:px-6 sm:py-4">
+              <CardTitle className="flex items-center text-lg font-semibold text-gray-800 dark:text-white">
+                <Filter className="h-5 w-5 mr-2 text-gray-500 dark:text-gray-300" />
                 Filtros
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
               <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
                 <div className="relative sm:col-span-2 md:col-span-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                   <Input
                     placeholder="Buscar por ID, paciente, médico, resultado..."
-                    className="pl-10 border-gray-300 h-10 rounded-md"
+                    className="pl-10 border-gray-300 h-10 rounded-md dark:bg-gray-900 dark:border-gray-700 dark:text-white dark:placeholder-gray-500"
                     value={searchTerm}
                     onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                   />
                 </div>
                 <div>
                   <Select value={filtroTipoExamen} onValueChange={(value) => { setFiltroTipoExamen(value); setCurrentPage(1); }}>
-                    <SelectTrigger className="border-gray-300 h-10 rounded-md">
+                    <SelectTrigger className="border-gray-300 h-10 rounded-md dark:bg-gray-900 dark:border-gray-700 dark:text-white">
                       <div className="flex items-center gap-2 text-sm">
-                        <FileText className="h-4 w-4 text-gray-500" />
+                        <FileText className="h-4 w-4 text-gray-500 dark:text-gray-300" />
                         <SelectValue placeholder="Tipo de Examen" />
                       </div>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="dark:bg-gray-800 dark:text-white dark:border-gray-700">
                       <SelectItem value="todos">Todos los tipos</SelectItem>
                       <SelectItem value="Radiografía">Radiografía</SelectItem>
                       <SelectItem value="Resonancia Magnética">Resonancia Magnética</SelectItem>
@@ -454,13 +467,13 @@ export default function HistorialPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-gray-200 shadow-sm w-full mt-6">
-            <CardHeader className="bg-gray-50 border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between">
+          <Card className="border-gray-200 dark:border-gray-700 shadow-sm w-full mt-6 dark:bg-gray-800">
+            <CardHeader className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ClipboardList className="h-5 w-5 text-gray-500" />
-                <CardTitle className="text-lg font-semibold text-gray-800">Historial</CardTitle>
+                <ClipboardList className="h-5 w-5 text-gray-500 dark:text-gray-300" />
+                <CardTitle className="text-lg font-semibold text-gray-800 dark:text-white">Historial</CardTitle>
                 {!loadingDiagnosticos && (
-                  <Badge variant="secondary" className="font-normal bg-teal-100 text-teal-700">
+                  <Badge variant="secondary" className="font-normal bg-teal-100 text-teal-700 dark:bg-teal-800 dark:text-teal-300">
                     {filteredDiagnosticos.length} resultado(s)
                   </Badge>
                 )}
@@ -469,7 +482,7 @@ export default function HistorialPage() {
                 variant="ghost"
                 size="sm"
                 onClick={loadDiagnosticos}
-                className="text-teal-700 hover:bg-teal-50"
+                className="text-teal-700 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-gray-700"
                 disabled={loadingDiagnosticos}
               >
                 {loadingDiagnosticos ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
@@ -479,91 +492,95 @@ export default function HistorialPage() {
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-gray-100">
-                    <TableRow>
-                      <TableHead className="w-[70px] px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700" onClick={() => requestSort("id_diagnostico")}>ID {getSortDirectionIcon("id_diagnostico")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700" onClick={() => requestSort("nombre_paciente")}><User className="h-3.5 w-3.5" /> Paciente {getSortDirectionIcon("nombre_paciente")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700" onClick={() => requestSort("nombre_medico")}><Stethoscope className="h-3.5 w-3.5" /> Médico {getSortDirectionIcon("nombre_medico")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700" onClick={() => requestSort("fecha_diagnostico")}><Calendar className="h-3.5 w-3.5" /> Fecha {getSortDirectionIcon("fecha_diagnostico")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700" onClick={() => requestSort("nombre_tipo_examen")}><FileText className="h-3.5 w-3.5" /> Tipo Ex. {getSortDirectionIcon("nombre_tipo_examen")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700" onClick={() => requestSort("resultado")}>Resultado {getSortDirectionIcon("resultado")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700" onClick={() => requestSort("nivel_confianza")}>Confianza {getSortDirectionIcon("nivel_confianza")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700" onClick={() => requestSort("estado")}>Estado {getSortDirectionIcon("estado")}</button></TableHead>
-                      <TableHead className="text-right px-4 py-2 text-xs font-medium text-gray-600 uppercase">Acciones</TableHead>
+                  <TableHeader className="bg-gray-100 dark:bg-gray-700/60">
+                    <TableRow className="border-gray-200 dark:border-gray-600">
+                      <TableHead className="w-[70px] px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("id_diagnostico")}>ID {getSortDirectionIcon("id_diagnostico")}</button></TableHead>
+                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nombre_paciente")}><User className="h-3.5 w-3.5" /> Paciente {getSortDirectionIcon("nombre_paciente")}</button></TableHead>
+                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nombre_medico")}><Stethoscope className="h-3.5 w-3.5" /> Médico {getSortDirectionIcon("nombre_medico")}</button></TableHead>
+                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("fecha_diagnostico")}><Calendar className="h-3.5 w-3.5" /> Fecha {getSortDirectionIcon("fecha_diagnostico")}</button></TableHead>
+                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nombre_tipo_examen")}><FileText className="h-3.5 w-3.5" /> Tipo Ex. {getSortDirectionIcon("nombre_tipo_examen")}</button></TableHead>
+                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("resultado")}>Resultado {getSortDirectionIcon("resultado")}</button></TableHead>
+                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nivel_confianza")}>Confianza {getSortDirectionIcon("nivel_confianza")}</button></TableHead>
+                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("estado")}>Estado {getSortDirectionIcon("estado")}</button></TableHead>
+                      <TableHead className="text-right px-4 py-2 text-xs font-medium text-gray-600 uppercase dark:text-gray-300">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {loadingDiagnosticos ? (<TableRow>
-                      <TableCell colSpan={9} className="h-32 text-center">
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <Loader2 className="h-6 w-6 text-teal-600 animate-spin" />
-                          <span className="text-sm text-gray-500">Cargando diagnósticos...</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    ) : paginatedDiagnosticos.length > 0 ? (
-                      paginatedDiagnosticos.map((diag) => (<TableRow key={diag.id_diagnostico} className="hover:bg-gray-50 text-sm border-b">
-                        <TableCell className="font-medium text-teal-700 px-4 py-3">{diag.id_diagnostico}</TableCell>
-                        <TableCell className="px-4 py-3">{diag.nombre_paciente || "—"}</TableCell>
-                        <TableCell className="px-4 py-3">{diag.nombre_medico || "—"}</TableCell>
-                        <TableCell className="px-4 py-3">{formatDate(diag.fecha_diagnostico, { day: '2-digit', month: 'short', year: 'numeric' } as Intl.DateTimeFormatOptions)}</TableCell>
-                        <TableCell className="px-4 py-3">{diag.nombre_tipo_examen || "—"}</TableCell>
-                        <TableCell className="px-4 py-3"><div className="max-w-[180px] truncate" title={diag.resultado}>{diag.resultado || "—"}</div></TableCell>
-                        <TableCell className="px-4 py-3 text-center"><Badge variant={diag.nivel_confianza >= 0.8 ? "default" : diag.nivel_confianza >= 0.5 ? "secondary" : "destructive"} className="font-medium">{formatConfidence(diag.nivel_confianza)}</Badge></TableCell>
-                        <TableCell className="px-4 py-3"><Badge variant={diag.estado === 'Completado' ? 'default' : diag.estado === 'Pendiente' ? 'outline' : 'destructive'} className={diag.estado === 'Completado' ? 'bg-green-100 text-green-700' : diag.estado === 'Pendiente' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' : 'bg-red-100 text-red-700'}>{diag.estado || "—"}</Badge></TableCell>
-                        <TableCell className="text-right px-4 py-3">
-                          <div className="flex justify-end items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleViewDiagnostico(diag.id_diagnostico)}
-                              className="h-8 w-8 text-gray-500 hover:text-teal-600 hover:bg-teal-50 rounded-md"
-                              title="Ver Detalles"
-                              disabled={deletingId === diag.id_diagnostico}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteDiagnostico(diag.id_diagnostico)}
-                              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md"
-                              title="Eliminar Diagnóstico"
-                              disabled={deletingId === diag.id_diagnostico}
-                            >
-                              {deletingId === diag.id_diagnostico ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
-                              )}
-                            </Button>
+                    {loadingDiagnosticos ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="h-32 text-center">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Loader2 className="h-6 w-6 text-teal-600 animate-spin" />
+                            <span className="text-sm text-gray-500 dark:text-gray-300">Cargando diagnósticos...</span>
                           </div>
                         </TableCell>
-                      </TableRow>))
-                    ) : (<TableRow>
-                      <TableCell colSpan={9} className="h-32 text-center">
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <AlertCircle className="h-6 w-6 text-gray-400" />
-                          <span className="text-gray-500">No se encontraron diagnósticos.</span>
-                          {(searchTerm || filtroTipoExamen) && (
-                            <Button variant="outline" size="sm" onClick={resetFilters} className="mt-2">
-                              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                              Limpiar filtros
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>)}
+                      </TableRow>
+                    ) : paginatedDiagnosticos.length > 0 ? (
+                      paginatedDiagnosticos.map((diag) => (
+                        <TableRow key={diag.id_diagnostico} className="hover:bg-gray-50 text-sm border-b dark:hover:bg-gray-700/50 dark:border-gray-700">
+                          <TableCell className="font-medium text-teal-700 dark:text-teal-400 px-4 py-3">{diag.id_diagnostico}</TableCell>
+                          <TableCell className="px-4 py-3 text-gray-900 dark:text-white">{diag.nombre_paciente || "—"}</TableCell>
+                          <TableCell className="px-4 py-3 text-gray-900 dark:text-white">{diag.nombre_medico || "—"}</TableCell>
+                          <TableCell className="px-4 py-3 text-gray-900 dark:text-white">{formatDate(diag.fecha_diagnostico, { day: '2-digit', month: 'short', year: 'numeric' } as Intl.DateTimeFormatOptions)}</TableCell>
+                          <TableCell className="px-4 py-3 text-gray-900 dark:text-white">{diag.nombre_tipo_examen || "—"}</TableCell>
+                          <TableCell className="px-4 py-3 text-gray-900 dark:text-white"><div className="max-w-[180px] truncate" title={diag.resultado}>{diag.resultado || "—"}</div></TableCell>
+                          <TableCell className="px-4 py-3 text-center"><Badge variant={diag.nivel_confianza >= 0.8 ? "default" : diag.nivel_confianza >= 0.5 ? "secondary" : "destructive"} className={`font-medium ${diag.nivel_confianza >= 0.8 ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-300' : diag.nivel_confianza >= 0.5 ? 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-800 dark:text-yellow-300 dark:border-yellow-600' : 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300'}`}>{formatConfidence(diag.nivel_confianza)}</Badge></TableCell>
+                          <TableCell className="px-4 py-3"><Badge variant={diag.estado === 'Completado' ? 'default' : diag.estado === 'Pendiente' ? 'outline' : 'destructive'} className={`${diag.estado === 'Completado' ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-300' : diag.estado === 'Pendiente' ? 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-800 dark:text-yellow-300 dark:border-yellow-600' : 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300'}`}>{diag.estado || "—"}</Badge></TableCell>
+                          <TableCell className="text-right px-4 py-3">
+                            <div className="flex justify-end items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleViewDiagnostico(diag.id_diagnostico)}
+                                className="h-8 w-8 text-gray-500 hover:text-teal-600 hover:bg-teal-50 rounded-md dark:text-gray-400 dark:hover:text-teal-400 dark:hover:bg-gray-700"
+                                title="Ver Detalles"
+                                disabled={deletingId === diag.id_diagnostico}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteDiagnostico(diag.id_diagnostico)}
+                                className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-gray-700"
+                                title="Eliminar Diagnóstico"
+                                disabled={deletingId === diag.id_diagnostico}
+                              >
+                                {deletingId === diag.id_diagnostico ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={9} className="h-32 text-center">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <AlertCircle className="h-6 w-6 text-gray-400 dark:text-gray-500" />
+                            <span className="text-gray-500 dark:text-gray-300">No se encontraron diagnósticos.</span>
+                            {(searchTerm || filtroTipoExamen) && (
+                              <Button variant="outline" size="sm" onClick={resetFilters} className="mt-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                                Limpiar filtros
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </div>
             </CardContent>
-
             {filteredDiagnosticos.length > 0 && totalPages > 1 && (
               <CardFooter
-                className="flex items-center justify-between border-t border-gray-200 px-6 py-3 bg-gray-50/50"
+                className="flex items-center justify-between border-t border-gray-200 px-6 py-3 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-800/50"
               >
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-gray-500 dark:text-gray-300">
                   Mostrando {(currentPage - 1) * itemsPerPage + 1} a{" "}
                   {Math.min(currentPage * itemsPerPage, filteredDiagnosticos.length)} de {filteredDiagnosticos.length}{" "}
                   resultados
@@ -574,11 +591,11 @@ export default function HistorialPage() {
                     size="icon"
                     onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                     disabled={currentPage === 1}
-                    className="h-7 w-7 border-gray-300 rounded-md"
+                    className="h-7 w-7 border-gray-300 rounded-md dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <div className="text-xs font-medium px-2.5 py-1 rounded">
+                  <div className="text-xs font-medium px-2.5 py-1 rounded dark:text-white">
                     Pág {currentPage} / {totalPages}
                   </div>
                   <Button
@@ -586,7 +603,7 @@ export default function HistorialPage() {
                     size="icon"
                     onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                     disabled={currentPage === totalPages || totalPages === 0}
-                    className="h-7 w-7 border-gray-300 rounded-md"
+                    className="h-7 w-7 border-gray-300 rounded-md dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -598,13 +615,13 @@ export default function HistorialPage() {
       )}
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col rounded-lg">
-          <DialogHeader className="p-6 border-b">
-            <DialogTitle className="text-2xl font-semibold text-gray-800">
+        <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col rounded-lg dark:bg-gray-800 dark:text-white">
+          <DialogHeader className="p-6 border-b dark:border-gray-700">
+            <DialogTitle className="text-2xl font-semibold text-gray-800 dark:text-white">
               Detalles del Diagnóstico #{selectedDiagnostico?.id_diagnostico || '...'}
             </DialogTitle>
             {selectedDiagnostico?.fecha_diagnostico && (
-              <DialogDescription className="text-sm text-gray-500">
+              <DialogDescription className="text-sm text-gray-500 dark:text-gray-300">
                 Fecha del diagnóstico: {formatDate(selectedDiagnostico.fecha_diagnostico, { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' } as Intl.DateTimeFormatOptions)}
               </DialogDescription>
             )}
@@ -614,69 +631,70 @@ export default function HistorialPage() {
             {modalLoading ? (
               <div className="flex flex-col items-center justify-center h-64">
                 <Loader2 className="h-12 w-12 text-teal-600 animate-spin" />
-                <p className="mt-4 text-lg text-gray-600">Cargando detalles...</p>
+                <p className="mt-4 text-lg text-gray-600 dark:text-gray-300">Cargando detalles...</p>
               </div>
             ) : modalError ? (
-              <Alert variant="destructive" className="my-4">
+              <Alert variant="destructive" className="my-4 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Error al Cargar Detalles</AlertTitle>
                 <AlertDescription>{modalError}</AlertDescription>
-                <Button variant="outline" size="sm" onClick={() => selectedDiagnostico && handleViewDiagnostico(selectedDiagnostico.id_diagnostico)} className="mt-2">
+                <Button variant="outline" size="sm" onClick={() => selectedDiagnostico && handleViewDiagnostico(selectedDiagnostico.id_diagnostico)} className="mt-2 dark:border-red-600 dark:text-red-300 dark:hover:bg-red-800">
                   Reintentar
                 </Button>
               </Alert>
             ) : selectedDiagnostico ? (
               <div className="space-y-6">
-                <Card className="shadow-md border-gray-200 rounded-lg">
+                <Card className="shadow-md border-gray-200 rounded-lg dark:border-gray-700 dark:bg-gray-700/50">
                   <CardHeader>
-                    <CardTitle className="text-xl flex items-center gap-2"><Info className="h-5 w-5 text-teal-600" />Información General</CardTitle>
+                    <CardTitle className="text-xl flex items-center gap-2 dark:text-white"><Info className="h-5 w-5 text-teal-600 dark:text-teal-400" />Información General</CardTitle>
                   </CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-sm">
-                    <div><strong>ID Diagnóstico:</strong> <Badge variant="outline">{selectedDiagnostico.id_diagnostico}</Badge></div>
-                    <div><strong>Estado:</strong> <Badge variant={selectedDiagnostico.estado_diagnostico === 'Completado' ? 'default' : selectedDiagnostico.estado_diagnostico === 'Pendiente' ? 'secondary' : 'destructive'} className={selectedDiagnostico.estado_diagnostico === 'Completado' ? 'bg-green-100 text-green-700' : selectedDiagnostico.estado_diagnostico === 'Pendiente' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}>{selectedDiagnostico.estado_diagnostico}</Badge></div>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-sm dark:text-gray-200">
+                    <div><strong>ID Diagnóstico:</strong> <Badge variant="outline" className="dark:border-gray-600 dark:text-gray-200">{selectedDiagnostico.id_diagnostico}</Badge></div>
+                    <div><strong>Estado:</strong> <Badge variant={selectedDiagnostico.estado_diagnostico === 'Completado' ? 'default' : selectedDiagnostico.estado_diagnostico === 'Pendiente' ? 'secondary' : 'destructive'} className={`${selectedDiagnostico.estado_diagnostico === 'Completado' ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-300' : selectedDiagnostico.estado_diagnostico === 'Pendiente' ? 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-800 dark:text-yellow-300 dark:border-yellow-600' : 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300'}`}>{selectedDiagnostico.estado_diagnostico}</Badge></div>
                     <div><strong>Paciente:</strong> {selectedDiagnostico.nombre_paciente || "N/A"} (NUI: {selectedDiagnostico.nui_paciente || "N/A"})</div>
                     <div><strong>Médico:</strong> {selectedDiagnostico.nombre_medico || "N/A"}</div>
                     <div><strong>Tipo de Examen:</strong> {selectedDiagnostico.nombre_tipo_examen || "N/A"}</div>
                     <div><strong>Resultado Principal (IA):</strong> {selectedDiagnostico.resultado || "N/A"}</div>
-                    <div><strong>Nivel de Confianza (IA):</strong> <Badge variant={selectedDiagnostico.nivel_confianza >= 0.8 ? "default" : selectedDiagnostico.nivel_confianza >= 0.5 ? "secondary" : "destructive"} className={selectedDiagnostico.nivel_confianza >= 0.8 ? 'bg-green-100 text-green-700' : selectedDiagnostico.nivel_confianza >= 0.5 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}>{formatConfidence(selectedDiagnostico.nivel_confianza)}</Badge></div>
+                    <div><strong>Nivel de Confianza (IA):</strong> <Badge variant={selectedDiagnostico.nivel_confianza >= 0.8 ? "default" : selectedDiagnostico.nivel_confianza >= 0.5 ? "secondary" : "destructive"} className={`${selectedDiagnostico.nivel_confianza >= 0.8 ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-300' : selectedDiagnostico.nivel_confianza >= 0.5 ? 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-800 dark:text-yellow-300 dark:border-yellow-600' : 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300'}`}>{formatConfidence(selectedDiagnostico.nivel_confianza)}</Badge></div>
                   </CardContent>
                 </Card>
 
                 {(selectedDiagnostico.ai_descripcion_detallada || selectedDiagnostico.ai_pronostico_tiempo_recuperacion || selectedDiagnostico.ai_pronostico_probabilidad_mejoria) && (
-                  <Card className="shadow-md border-gray-200 rounded-lg">
+                  <Card className="shadow-md border-gray-200 rounded-lg dark:border-gray-700 dark:bg-gray-700/50">
                     <CardHeader>
-                      <CardTitle className="text-xl flex items-center gap-2"><Stethoscope className="h-5 w-5 text-teal-600" />Análisis Detallado (IA)</CardTitle>
+                      <CardTitle className="text-xl flex items-center gap-2 dark:text-white"><Stethoscope className="h-5 w-5 text-teal-600 dark:text-teal-400" />Análisis Detallado (IA)</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3 text-sm">
+                    <CardContent className="space-y-3 text-sm dark:text-gray-200">
                       {selectedDiagnostico.ai_descripcion_detallada && (
                         <div>
-                          <h4 className="font-semibold text-gray-700 mb-1">Descripción Detallada:</h4>
-                          <p className="text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-md">{selectedDiagnostico.ai_descripcion_detallada}</p>
+                          <h4 className="font-semibold text-gray-700 dark:text-gray-100 mb-1">Descripción Detallada:</h4>
+                          <p className="text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-md dark:bg-gray-800 dark:text-gray-300">{selectedDiagnostico.ai_descripcion_detallada}</p>
                         </div>
                       )}
                       {(selectedDiagnostico.ai_pronostico_tiempo_recuperacion || selectedDiagnostico.ai_pronostico_probabilidad_mejoria) && (
                         <div>
-                          <h4 className="font-semibold text-gray-700 mb-1 mt-3 flex items-center gap-1.5"><HeartPulse className="h-4 w-4" />Pronóstico:</h4>
-                          {selectedDiagnostico.ai_pronostico_tiempo_recuperacion && <p className="text-gray-600"><strong>Tiempo de recuperación:</strong> {selectedDiagnostico.ai_pronostico_tiempo_recuperacion}</p>}
-                          {selectedDiagnostico.ai_pronostico_probabilidad_mejoria && <p className="text-gray-600"><strong>Probabilidad de mejoría:</strong> {selectedDiagnostico.ai_pronostico_probabilidad_mejoria}</p>}
+                          <h4 className="font-semibold text-gray-700 dark:text-gray-100 mb-1 mt-3 flex items-center gap-1.5"><HeartPulse className="h-4 w-4 dark:text-teal-400" />Pronóstico:</h4>
+                          {selectedDiagnostico.ai_pronostico_tiempo_recuperacion && <p className="text-gray-600 dark:text-gray-300"><strong>Tiempo de recuperación:</strong> {selectedDiagnostico.ai_pronostico_tiempo_recuperacion}</p>}
+                          {selectedDiagnostico.ai_pronostico_probabilidad_mejoria && <p className="text-gray-600 dark:text-gray-300"><strong>Probabilidad de mejoría:</strong> {selectedDiagnostico.ai_pronostico_probabilidad_mejoria}</p>}
                         </div>
                       )}
                     </CardContent>
                   </Card>
                 )}
 
-                <Card className="shadow-md border-gray-200 rounded-lg">
+                <Card className="shadow-md border-gray-200 rounded-lg dark:border-gray-700 dark:bg-gray-700/50">
                   <CardHeader>
-                    <CardTitle className="text-xl flex items-center gap-2"><ImageIcon className="h-5 w-5 text-teal-600" />Imagen Médica</CardTitle>
+                    <CardTitle className="text-xl flex items-center gap-2 dark:text-white"><ImageIcon className="h-5 w-5 text-teal-600 dark:text-teal-400" />Imagen Médica</CardTitle>
                   </CardHeader>
                   <CardContent className="flex flex-col items-center">
                     {selectedDiagnostico.imagen_url ? (
                       <div className="flex flex-col items-center">
-                        <div className="bg-gray-100 rounded-md p-2 shadow-inner mb-4">
+                        <div className="bg-gray-100 rounded-md p-2 shadow-inner mb-4 dark:bg-gray-800">
                           <img
+                            ref={imageToCaptureRef}
                             src={getImageUrlFromDetails(selectedDiagnostico.imagen_url, selectedDiagnostico.imagen_tipo)}
                             alt={`Imagen del diagnóstico ${selectedDiagnostico.id_diagnostico}`}
-                            className="rounded-md max-w-full h-auto max-h-96 object-contain border shadow-sm"
+                            className="rounded-md max-w-full h-auto max-h-96 object-contain border shadow-sm dark:border-gray-600"
                             onError={(e) => {
                               console.error("Error al cargar la imagen en <img>:", e);
                               (e.target as HTMLImageElement).src = `https://placehold.co/600x400/e2e8f0/94a3b8?text=Error+al+cargar+imagen`;
@@ -684,13 +702,13 @@ export default function HistorialPage() {
                             }}
                           />
                         </div>
-                        <div className="text-xs text-gray-600 bg-teal-50 px-3 py-1.5 rounded-md">
+                        <div className="text-xs text-gray-600 bg-teal-50 px-3 py-1.5 rounded-md dark:bg-teal-900 dark:text-teal-300">
                           <p>ID Diagnóstico: {selectedDiagnostico.id_diagnostico} | Tipo: {selectedDiagnostico.imagen_tipo || "No especificado"}</p>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center text-gray-500 p-4">
-                        <ImageIcon className="h-16 w-16 text-gray-300 mx-auto mb-2" />
+                      <div className="text-center text-gray-500 p-4 dark:text-gray-300">
+                        <ImageIcon className="h-16 w-16 text-gray-300 mx-auto mb-2 dark:text-gray-500" />
                         No hay imagen asociada a este diagnóstico.
                       </div>
                     )}
@@ -698,28 +716,28 @@ export default function HistorialPage() {
                 </Card>
 
                 {selectedDiagnostico.recomendaciones && selectedDiagnostico.recomendaciones.length > 0 && (
-                  <Card className="shadow-md border-gray-200 rounded-lg">
+                  <Card className="shadow-md border-gray-200 rounded-lg dark:border-gray-700 dark:bg-gray-700/50">
                     <CardHeader>
-                      <CardTitle className="text-xl flex items-center gap-2"><ListChecks className="h-5 w-5 text-teal-600" />Recomendaciones</CardTitle>
+                      <CardTitle className="text-xl flex items-center gap-2 dark:text-white"><ListChecks className="h-5 w-5 text-teal-600 dark:text-teal-400" />Recomendaciones</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-3">
                         {selectedDiagnostico.recomendaciones.map((rec) => (
-                          <li key={rec.id_recomendacion} className="p-3 border rounded-md bg-gray-50/70 shadow-sm">
+                          <li key={rec.id_recomendacion} className="p-3 border rounded-md bg-gray-50/70 shadow-sm dark:border-gray-600 dark:bg-gray-800/70 dark:text-gray-200">
                             <div className="flex justify-between items-start mb-1">
-                              <p className="text-sm font-medium text-gray-800">{rec.descripcion}</p>
+                              <p className="text-sm font-medium text-gray-800 dark:text-white">{rec.descripcion}</p>
                               <Badge
-                                variant={
-                                  rec.prioridad === 'Alta' ? 'destructive' :
-                                    rec.prioridad === 'Media' ? 'default' :
-                                      'secondary'
-                                }
-                                className="text-xs whitespace-nowrap"
+                                variant={rec.prioridad === 'Alta' ? 'destructive' : rec.prioridad === 'Media' ? 'default' : 'secondary'}
+                                className={`text-xs whitespace-nowrap ${
+                                  rec.prioridad === 'Alta' ? 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300'
+                                  : rec.prioridad === 'Media' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-300'
+                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-300' // Adjusted for 'Baja' or other priorities
+                                }`}
                               >
                                 Prioridad: {rec.prioridad}
                               </Badge>
                             </div>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
                               Registrada: {formatDate(rec.fecha_creacion, { day: '2-digit', month: 'short', year: 'numeric' } as Intl.DateTimeFormatOptions)}
                             </p>
                           </li>
@@ -729,20 +747,39 @@ export default function HistorialPage() {
                   </Card>
                 )}
                 {(!selectedDiagnostico.recomendaciones || selectedDiagnostico.recomendaciones.length === 0) && (
-                  <p className="text-sm text-gray-500 p-4 border rounded-md bg-gray-50 text-center">No hay recomendaciones registradas para este diagnóstico.</p>
+                  <p className="text-sm text-gray-500 p-4 border rounded-md bg-gray-50 text-center dark:text-gray-300 dark:border-gray-700 dark:bg-gray-800/50">No hay recomendaciones registradas para este diagnóstico.</p>
                 )}
-
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-64">
-                <AlertCircle className="h-12 w-12 text-gray-400" />
-                <p className="mt-4 text-lg text-gray-600">No se ha seleccionado ningún diagnóstico o no hay datos para mostrar.</p>
+                <AlertCircle className="h-12 w-12 text-gray-400 dark:text-gray-500" />
+                <p className="mt-4 text-lg text-gray-600 dark:text-gray-300">No se ha seleccionado ningún diagnóstico o no hay datos para mostrar.</p>
               </div>
             )}
           </ScrollArea>
 
-          <DialogFooter className="p-4 border-t bg-gray-50 rounded-b-lg">
-            <Button variant="outline" onClick={() => setIsModalOpen(false)} className="border-gray-300 text-gray-700 hover:bg-gray-100">Cerrar</Button>
+          <DialogFooter className="p-4 border-t bg-gray-50 rounded-b-lg flex flex-col sm:flex-row sm:justify-end gap-2 dark:border-gray-700 dark:bg-gray-800/80">
+            <Button
+              variant="outline"
+              onClick={() => setIsModalOpen(false)}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100 w-full sm:w-auto dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+            >
+              Cerrar
+            </Button>
+            {selectedDiagnostico && !modalLoading && (
+              <Button
+                onClick={handleDownloadPDFFromModal}
+                disabled={pdfLoading}
+                className="bg-teal-600 hover:bg-teal-700 text-white w-full sm:w-auto dark:bg-teal-700 dark:hover:bg-teal-800"
+              >
+                {pdfLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileDown className="h-4 w-4 mr-2" />
+                )}
+                {pdfLoading ? "Generando PDF..." : "Descargar PDF"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
