@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, Fragment, useRef } from "react"
-import Link from "next/link"
+// Asumiendo que Link es de next/link, pero no se usa directamente en este fragmento modificado.
+// import Link from "next/link" 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -30,7 +31,7 @@ import {
   FileText,
   Loader2,
   RefreshCw,
-  FileDown,
+  FileDown, // Aunque el botón de exportar se elimina, el ícono puede usarse en el modal
   ClipboardList,
   User,
   Stethoscope,
@@ -40,8 +41,8 @@ import {
   Info,
   Trash2
 } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
-import { generateDiagnosisPDF, type DiagnosisReportData } from "@/lib/generate-pdf"
+import { useAuth } from "@/context/AuthContext" // Asumiendo que este hook existe y funciona
+import { generateDiagnosisPDF, type DiagnosisReportData } from "@/lib/generate-pdf" // Asumiendo que esta utilidad existe
 
 // Interfaces
 interface DiagnosticoHistorial {
@@ -90,7 +91,7 @@ interface DiagnosticoDetallado {
 export default function HistorialPage() {
   const [diagnosticos, setDiagnosticos] = useState<DiagnosticoHistorial[]>([])
   const [error, setError] = useState<string | null>(null)
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading } = useAuth() // Estado de autenticación
   const [loadingDiagnosticos, setLoadingDiagnosticos] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -110,11 +111,12 @@ export default function HistorialPage() {
   const itemsPerPage = 10
   const imageToCaptureRef = useRef<HTMLImageElement>(null);
 
+  // Carga los diagnósticos desde la API
   const loadDiagnosticos = async () => {
     setLoadingDiagnosticos(true)
     setError(null);
     try {
-      const response = await fetch("/api/diagnosticos")
+      const response = await fetch("/api/diagnosticos") // Endpoint de la API para obtener diagnósticos
       const data = await response.json()
       if (response.ok) {
         if (Array.isArray(data)) {
@@ -137,12 +139,14 @@ export default function HistorialPage() {
     }
   }
 
+  // Efecto para cargar diagnósticos cuando el estado de autenticación cambie
   useEffect(() => {
     if (!authLoading) {
       loadDiagnosticos()
     }
-  }, [authLoading])
+  }, [authLoading]) // Dependencia: authLoading
 
+  // Filtra los diagnósticos según el término de búsqueda y el tipo de examen
   const filteredDiagnosticos = diagnosticos.filter((diag) => {
     const searchTermLower = searchTerm.toLowerCase();
     const matchesSearch =
@@ -157,13 +161,17 @@ export default function HistorialPage() {
     return matchesSearch && matchesTipo
   })
 
+  // Ordena los diagnósticos según la configuración de ordenamiento
   const sortedDiagnosticos = [...filteredDiagnosticos].sort((a, b) => {
     if (!sortConfig) {
+      // Ordenar por fecha de diagnóstico descendente por defecto
       return new Date(b.fecha_diagnostico).getTime() - new Date(a.fecha_diagnostico).getTime();
     }
     const { key, direction } = sortConfig
     const aValue = a[key as keyof DiagnosticoHistorial] ?? "";
     const bValue = b[key as keyof DiagnosticoHistorial] ?? "";
+
+    // Manejo especial para fechas
     if (key === 'fecha_diagnostico') {
       const dateA = new Date(aValue as string).getTime();
       const dateB = new Date(bValue as string).getTime();
@@ -171,6 +179,8 @@ export default function HistorialPage() {
       if (dateA > dateB) return direction === "ascending" ? 1 : -1;
       return 0;
     }
+
+    // Ordenamiento genérico para otros campos
     if (aValue < bValue) return direction === "ascending" ? -1 : 1;
     if (aValue > bValue) return direction === "ascending" ? 1 : -1;
     return 0;
@@ -179,6 +189,7 @@ export default function HistorialPage() {
   const totalPages = Math.ceil(sortedDiagnosticos.length / itemsPerPage)
   const paginatedDiagnosticos = sortedDiagnosticos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
+  // Solicita el ordenamiento por una clave específica
   const requestSort = (key: keyof DiagnosticoHistorial | string) => {
     let direction: "ascending" | "descending" = "ascending"
     if (sortConfig && sortConfig.key === key && sortConfig.direction === "ascending") {
@@ -187,6 +198,7 @@ export default function HistorialPage() {
     setSortConfig({ key, direction })
   }
 
+  // Obtiene el ícono de dirección de ordenamiento
   const getSortDirectionIcon = (key: keyof DiagnosticoHistorial | string) => {
     if (!sortConfig || sortConfig.key !== key) {
       return <ArrowUpDown className="ml-1 h-3.5 w-3.5 text-gray-400" />
@@ -198,12 +210,7 @@ export default function HistorialPage() {
     )
   }
 
-  const handleExport = () => {
-    console.log("Exportando datos:", sortedDiagnosticos);
-    // Replace alert with a more robust notification system if available
-    alert("Funcionalidad de exportación pendiente.")
-  }
-
+  // Maneja la visualización de los detalles de un diagnóstico
   const handleViewDiagnostico = async (id_diagnostico: number) => {
     setSelectedDiagnostico(null);
     setModalLoading(true);
@@ -212,7 +219,7 @@ export default function HistorialPage() {
     console.log(`[FRONTEND handleViewDiagnostico] Solicitando detalles para ID: ${id_diagnostico}`);
 
     try {
-      const response = await fetch(`/api/diagnosticos/${id_diagnostico}`);
+      const response = await fetch(`/api/diagnosticos/${id_diagnostico}`); // Endpoint para detalles
       const data = await response.json();
 
       console.log(`[FRONTEND handleViewDiagnostico] Respuesta de API para ID ${id_diagnostico} - Status: ${response.status}`);
@@ -235,18 +242,19 @@ export default function HistorialPage() {
     }
   };
 
+  // Maneja la eliminación de un diagnóstico
   const handleDeleteDiagnostico = async (id_diagnostico: number) => {
-    // Replace window.confirm with a custom modal for better UX
+    // Considerar reemplazar window.confirm con un modal de confirmación personalizado
     if (!window.confirm(`¿Está seguro de que desea eliminar el diagnóstico ID ${id_diagnostico}? Esta acción no se puede deshacer y eliminará todos los datos asociados.`)) {
       return;
     }
     setDeletingId(id_diagnostico);
     try {
-      const response = await fetch(`/api/diagnosticos/${id_diagnostico}`, { method: 'DELETE' });
+      const response = await fetch(`/api/diagnosticos/${id_diagnostico}`, { method: 'DELETE' }); // Endpoint para eliminar
       const responseData = await response.json();
       if (response.ok) {
         setDiagnosticos(prev => prev.filter(d => d.id_diagnostico !== id_diagnostico));
-        // Replace alert with a more robust notification system
+        // Considerar un sistema de notificaciones más robusto en lugar de alert
         alert(responseData.message || `Diagnóstico ID ${id_diagnostico} eliminado.`);
         if (isModalOpen && selectedDiagnostico?.id_diagnostico === id_diagnostico) {
           setIsModalOpen(false);
@@ -262,6 +270,7 @@ export default function HistorialPage() {
     }
   };
 
+  // Maneja la descarga del PDF desde el modal
   const handleDownloadPDFFromModal = async () => {
     if (!selectedDiagnostico) {
       setModalError("No hay diagnóstico seleccionado para generar el PDF.");
@@ -295,6 +304,7 @@ export default function HistorialPage() {
       console.log("Generando PDF para historial con datos:", reportData);
       console.log("Elemento a capturar para imagen (ref):", imageToCaptureRef.current);
 
+      // Llama a la función para generar el PDF
       const pdf = await generateDiagnosisPDF(reportData, imageToCaptureRef.current || undefined);
       pdf.save(`diagnostico_historial_${selectedDiagnostico.id_diagnostico}_${reportData.patientInfo.name.replace(/\s+/g, '_')}.pdf`);
       console.log("PDF de historial generado y descarga iniciada.");
@@ -307,88 +317,99 @@ export default function HistorialPage() {
     }
   };
 
-
+  // Reinicia los filtros a sus valores por defecto
   const resetFilters = () => {
-    setSearchTerm(""); setFiltroTipoExamen(""); setSortConfig(null); setCurrentPage(1);
+    setSearchTerm(""); 
+    setFiltroTipoExamen(""); 
+    setSortConfig(null); 
+    setCurrentPage(1);
   }
 
+  // Formatea una cadena de fecha
   const formatDate = (dateString: string | null, options?: Intl.DateTimeFormatOptions) => {
-    if (!dateString) return "—";
+    if (!dateString) return "—"; // Retorna un guion si la fecha es nula
     try {
       const date = new Date(dateString);
-      // Specific format for modal title description
+      // Formato específico para la descripción del título del modal
       if (options && options.month === 'long' && options.year === 'numeric' && options.day === 'numeric' && options.hour && options.minute) {
         const dia = date.getDate().toString().padStart(2, '0');
-        const mes = date.toLocaleDateString('es-CO', { month: 'long' });
+        const mes = date.toLocaleDateString('es-CO', { month: 'long' }); // Formato de mes largo en español de Colombia
         const año = date.getFullYear();
         const hora = date.getHours().toString().padStart(2, '0');
         const minutos = date.getMinutes().toString().padStart(2, '0');
         return `${dia} de ${mes} de ${año}, ${hora}:${minutos}`;
       }
-      // Default short format for table
+      // Formato corto por defecto para la tabla
       const defaultShortOptions: Intl.DateTimeFormatOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
-      return date.toLocaleDateString('es-CO', options || defaultShortOptions);
+      return date.toLocaleDateString('es-CO', options || defaultShortOptions); // Localización para Colombia
     } catch (e) {
       console.warn("Error al formatear fecha:", dateString, e);
-      return dateString; // Return original string if formatting fails
+      return dateString; // Retorna la cadena original si falla el formateo
     }
   }
 
+  // Formatea el nivel de confianza a porcentaje
   const formatConfidence = (confidence: number | null | undefined): string => {
     if (confidence === null || confidence === undefined) return "N/A";
     return `${(confidence * 100).toFixed(0)}%`;
   };
 
+  // Obtiene la URL de la imagen a partir de los detalles del diagnóstico
   const getImageUrlFromDetails = (
     imageUrl: string | null,
     imageType: string | null
   ): string => {
     console.log(`[FRONTEND getImageUrlFromDetails] URL recibida (raw): "${imageUrl ? String(imageUrl).substring(0, 60) + "..." : "null"}", Tipo: ${imageType}`);
-    const placeholderImg = 'https://placehold.co/600x400/e2e8f0/94a3b8?text=Imagen+no+disponible';
+    const placeholderImg = 'https://placehold.co/600x400/e2e8f0/94a3b8?text=Imagen+no+disponible'; // Imagen de placeholder
+    
     if (!imageUrl) {
       console.warn('[FRONTEND getImageUrlFromDetails] imageUrl es nulo. Usando placeholder.');
       return placeholderImg;
     }
+
     let imageUrlString = String(imageUrl).trim();
-    // Remove surrounding quotes if any
+    // Elimina comillas si existen
     if ((imageUrlString.startsWith('"') && imageUrlString.endsWith('"')) ||
-      (imageUrlString.startsWith("'") && imageUrlString.endsWith("'"))) {
+        (imageUrlString.startsWith("'") && imageUrlString.endsWith("'"))) {
       imageUrlString = imageUrlString.substring(1, imageUrlString.length - 1);
     }
-    // If it's already a data URI
+
+    // Si ya es una URI de datos
     if (imageUrlString.startsWith('data:image')) {
       return imageUrlString;
     }
-    // If it's a full URL
+    // Si es una URL completa
     if (imageUrlString.startsWith('http://') || imageUrlString.startsWith('https://')) {
       return imageUrlString;
     }
-    // If it's base64 data and we have a type
+    // Si es data base64 y tenemos un tipo
     if (imageType) {
-      let mimeType = 'image/jpeg'; // Default MIME type
+      let mimeType = 'image/jpeg'; // Tipo MIME por defecto
       const tipoLimpio = String(imageType).toLowerCase().trim();
       if (tipoLimpio === 'jpg' || tipoLimpio === 'jpeg') mimeType = 'image/jpeg';
       else if (tipoLimpio === 'png') mimeType = 'image/png';
       else if (tipoLimpio === 'gif') mimeType = 'image/gif';
       else if (tipoLimpio === 'webp') mimeType = 'image/webp';
-      else if (tipoLimpio === 'dicom') mimeType = 'image/png'; // Convert DICOM to PNG for display if needed, or handle appropriately
+      // Considerar convertir DICOM a PNG para visualización o manejarlo apropiadamente
+      else if (tipoLimpio === 'dicom') mimeType = 'image/png'; 
       else if (tipoLimpio.startsWith('image/')) mimeType = tipoLimpio;
 
       const dataUri = `data:${mimeType};base64,${imageUrlString}`;
       return dataUri;
     }
-    // If it's a relative path (e.g., /uploads/image.jpg)
+    // Si es una ruta relativa (ej. /uploads/image.jpg)
     if (imageUrlString.startsWith('/')) {
-      // Assuming it's served from the same domain, this should work
+      // Asumiendo que se sirve desde el mismo dominio
       return imageUrlString;
     }
-    // Fallback if we can't determine the type or format
+    // Fallback si no se puede determinar el tipo o formato
     console.warn('[FRONTEND getImageUrlFromDetails] No se pudo determinar el formato de la imagen. Usando placeholder.');
     return placeholderImg;
   };
 
   return (
     <div className="w-full h-full py-8 px-4 sm:px-6 space-y-8 bg-slate-50 dark:bg-gray-900">
+      {/* Encabezado de la página */}
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-gray-200 dark:border-gray-700">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Historial de Diagnósticos</h1>
@@ -403,13 +424,11 @@ export default function HistorialPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Reiniciar Filtros
           </Button>
-          <Button onClick={handleExport} className="bg-teal-600 hover:bg-teal-700 text-white rounded-md dark:bg-teal-700 dark:hover:bg-teal-800">
-            <FileDown className="h-4 w-4 mr-2" />
-            Exportar
-          </Button>
+          {/* Botón de Exportar eliminado */}
         </div>
       </header>
 
+      {/* Estado de carga inicial o error */}
       {authLoading ? (
         <div className="flex flex-col items-center justify-center w-full h-64 gap-4">
           <Loader2 className="h-8 w-8 text-teal-600 animate-spin" />
@@ -426,6 +445,7 @@ export default function HistorialPage() {
         </Alert>
       ) : (
         <Fragment>
+          {/* Tarjeta de Filtros */}
           <Card className="border-gray-200 dark:border-gray-700 shadow-sm w-full dark:bg-gray-800">
             <CardHeader className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 px-4 py-3 sm:px-6 sm:py-4">
               <CardTitle className="flex items-center text-lg font-semibold text-gray-800 dark:text-white">
@@ -435,6 +455,7 @@ export default function HistorialPage() {
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
               <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                {/* Input de búsqueda */}
                 <div className="relative sm:col-span-2 md:col-span-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                   <Input
@@ -444,6 +465,7 @@ export default function HistorialPage() {
                     onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                   />
                 </div>
+                {/* Selector de tipo de examen */}
                 <div>
                   <Select value={filtroTipoExamen} onValueChange={(value) => { setFiltroTipoExamen(value); setCurrentPage(1); }}>
                     <SelectTrigger className="border-gray-300 h-10 rounded-md dark:bg-gray-900 dark:border-gray-700 dark:text-white">
@@ -467,6 +489,7 @@ export default function HistorialPage() {
             </CardContent>
           </Card>
 
+          {/* Tarjeta de Historial (Tabla) */}
           <Card className="border-gray-200 dark:border-gray-700 shadow-sm w-full mt-6 dark:bg-gray-800">
             <CardHeader className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -576,6 +599,7 @@ export default function HistorialPage() {
                 </Table>
               </div>
             </CardContent>
+            {/* Paginación */}
             {filteredDiagnosticos.length > 0 && totalPages > 1 && (
               <CardFooter
                 className="flex items-center justify-between border-t border-gray-200 px-6 py-3 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-800/50"
@@ -614,6 +638,7 @@ export default function HistorialPage() {
         </Fragment>
       )}
 
+      {/* Modal de Detalles del Diagnóstico */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col rounded-lg dark:bg-gray-800 dark:text-white">
           <DialogHeader className="p-6 border-b dark:border-gray-700">
@@ -644,6 +669,7 @@ export default function HistorialPage() {
               </Alert>
             ) : selectedDiagnostico ? (
               <div className="space-y-6">
+                {/* Información General del Diagnóstico */}
                 <Card className="shadow-md border-gray-200 rounded-lg dark:border-gray-700 dark:bg-gray-700/50">
                   <CardHeader>
                     <CardTitle className="text-xl flex items-center gap-2 dark:text-white"><Info className="h-5 w-5 text-teal-600 dark:text-teal-400" />Información General</CardTitle>
@@ -659,6 +685,7 @@ export default function HistorialPage() {
                   </CardContent>
                 </Card>
 
+                {/* Análisis Detallado (IA) */}
                 {(selectedDiagnostico.ai_descripcion_detallada || selectedDiagnostico.ai_pronostico_tiempo_recuperacion || selectedDiagnostico.ai_pronostico_probabilidad_mejoria) && (
                   <Card className="shadow-md border-gray-200 rounded-lg dark:border-gray-700 dark:bg-gray-700/50">
                     <CardHeader>
@@ -682,6 +709,7 @@ export default function HistorialPage() {
                   </Card>
                 )}
 
+                {/* Imagen Médica */}
                 <Card className="shadow-md border-gray-200 rounded-lg dark:border-gray-700 dark:bg-gray-700/50">
                   <CardHeader>
                     <CardTitle className="text-xl flex items-center gap-2 dark:text-white"><ImageIcon className="h-5 w-5 text-teal-600 dark:text-teal-400" />Imagen Médica</CardTitle>
@@ -691,7 +719,7 @@ export default function HistorialPage() {
                       <div className="flex flex-col items-center">
                         <div className="bg-gray-100 rounded-md p-2 shadow-inner mb-4 dark:bg-gray-800">
                           <img
-                            ref={imageToCaptureRef}
+                            ref={imageToCaptureRef} // Referencia para captura de imagen para PDF
                             src={getImageUrlFromDetails(selectedDiagnostico.imagen_url, selectedDiagnostico.imagen_tipo)}
                             alt={`Imagen del diagnóstico ${selectedDiagnostico.id_diagnostico}`}
                             className="rounded-md max-w-full h-auto max-h-96 object-contain border shadow-sm dark:border-gray-600"
@@ -715,6 +743,7 @@ export default function HistorialPage() {
                   </CardContent>
                 </Card>
 
+                {/* Recomendaciones */}
                 {selectedDiagnostico.recomendaciones && selectedDiagnostico.recomendaciones.length > 0 && (
                   <Card className="shadow-md border-gray-200 rounded-lg dark:border-gray-700 dark:bg-gray-700/50">
                     <CardHeader>
@@ -731,7 +760,7 @@ export default function HistorialPage() {
                                 className={`text-xs whitespace-nowrap ${
                                   rec.prioridad === 'Alta' ? 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300'
                                   : rec.prioridad === 'Media' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-300'
-                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-300' // Adjusted for 'Baja' or other priorities
+                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-300' // Color para prioridad 'Baja' u otras
                                 }`}
                               >
                                 Prioridad: {rec.prioridad}
@@ -758,6 +787,7 @@ export default function HistorialPage() {
             )}
           </ScrollArea>
 
+          {/* Pie de página del Modal */}
           <DialogFooter className="p-4 border-t bg-gray-50 rounded-b-lg flex flex-col sm:flex-row sm:justify-end gap-2 dark:border-gray-700 dark:bg-gray-800/80">
             <Button
               variant="outline"
