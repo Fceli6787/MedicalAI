@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react" 
+import { useRouter } from "next/navigation"; // Importar useRouter
 import { useAuth } from "@/context/AuthContext"
 import { analyzeImageWithOpenRouter } from "@/lib/openrouter"
 import { generateDiagnosisPDF, type DiagnosisReportData } from "@/lib/generate-pdf" 
@@ -32,6 +33,7 @@ import {
   Calendar, 
   FileText,
 } from "lucide-react"
+import Swal from 'sweetalert2'; // Importar SweetAlert2
 
 // Interface for diagnosis result
 interface DiagnosticoResult {
@@ -79,9 +81,11 @@ export default function NuevoDiagnosticoPage() {
   const [clinicalHistory, setClinicalHistory] = useState("");
 
   const { user } = useAuth()
+  const router = useRouter(); // Inicializar useRouter
   const imageRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (diagnosisResult) {
@@ -436,35 +440,48 @@ export default function NuevoDiagnosticoPage() {
       }
 
       console.log("[handleSave] Diagnóstico guardado exitosamente:", result);
-      alert(`Diagnóstico guardado exitosamente con ID: ${result.id_diagnostico}`)
-      
-      setPacienteId(null)
-      setSearchTerm("")
-      setPatientFirstName("");
-      setPatientLastName("");
-      setPatientNui("");
-      setExamDate(new Date().toISOString().split("T")[0]);
-      setClinicalHistory("");
-      
-      setImagePreview(null)
-      setImageBase64(null)
-      setOriginalFileName(null)
-      setProcessedFileType(null)
-      setDiagnosisResult(null)
-      setAnalysisComplete(false)
-      setResultadoIA(null) 
-      setConfianzaIA(null) 
-      setTipoExamen("Radiografía")
-      setRegion("torax")
-      setActiveTab("cargar")
+      Swal.fire({
+          icon: 'success',
+          title: '¡Diagnóstico Guardado!',
+          text: `El diagnóstico ha sido guardado exitosamente con ID: ${result.id_diagnostico}.`,
+          showConfirmButton: false,
+          timer: 2000
+      }).then(() => {
+          // Resetear el formulario
+          setPacienteId(null);
+          setSearchTerm("");
+          setPatientFirstName("");
+          setPatientLastName("");
+          setPatientNui("");
+          setExamDate(new Date().toISOString().split("T")[0]);
+          setClinicalHistory("");
+          
+          setImagePreview(null);
+          setImageBase64(null);
+          setOriginalFileName(null);
+          setProcessedFileType(null);
+          setDiagnosisResult(null);
+          setAnalysisComplete(false);
+          setResultadoIA(null); 
+          setConfianzaIA(null); 
+          setTipoExamen("Radiografía");
+          setRegion("torax");
+          setActiveTab("cargar"); // Volver a la primera pestaña
+          router.push("/dashboard/historial"); // Redirigir al historial de diagnósticos
+      });
 
     } catch (err: any) {
       console.error("[handleSave] Error en el bloque try/catch:", err);
+      let errorMessage = err.message || "Error desconocido al guardar el diagnóstico.";
       if (err instanceof SyntaxError && err.message.includes("Unexpected token '<'")) {
-          setError("Error de comunicación con el servidor (posiblemente ruta no encontrada).");
-      } else {
-          setError(err.message || "Error desconocido al guardar el diagnóstico.");
+          errorMessage = "Error de comunicación con el servidor (posiblemente ruta no encontrada o respuesta HTML).";
       }
+      Swal.fire({
+          icon: 'error',
+          title: 'Error al Guardar',
+          text: errorMessage,
+      });
+      setError(errorMessage); // También establecer el error en el estado local
     } finally {
       console.log("[handleSave] Finalizando setLoading a false.");
       setLoading(false)
@@ -556,7 +573,7 @@ export default function NuevoDiagnosticoPage() {
                         size="sm"
                         onClick={() => {
                             setImagePreview(null); setImageBase64(null); setOriginalFileName(null); setProcessedFileType(null);
-                            (document.getElementById("file-upload") as HTMLInputElement).value = "";
+                            if (fileInputRef.current) fileInputRef.current.value = "";
                         }}
                         className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-600 dark:hover:bg-red-700/50 dark:hover:text-red-300"
                         >
@@ -584,11 +601,12 @@ export default function NuevoDiagnosticoPage() {
                         className="hidden"
                         accept=".dcm,application/dicom,image/png,image/jpeg,image/jpg"
                         onChange={handleFileChange}
+                        ref={fileInputRef}
                         />
                         <Button
                         variant="outline"
                         className="mt-6 bg-white border-teal-500 text-teal-600 hover:bg-teal-50 hover:border-teal-600 dark:bg-gray-700 dark:border-teal-600 dark:text-teal-400 dark:hover:bg-gray-600 dark:hover:border-teal-500 font-semibold px-6 py-2.5"
-                        onClick={() => document.getElementById("file-upload")?.click()}
+                        onClick={() => fileInputRef.current?.click()}
                         >
                         <Upload className="h-4 w-4 mr-2" />
                         Seleccionar Archivo

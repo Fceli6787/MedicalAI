@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import Swal from 'sweetalert2';
 import { toast } from "sonner";
 
-// ... (interfaz User sin cambios) ...
+// ... (interfaz User actualizada) ...
 export interface User {
   id_usuario: number;
   id_tipo_documento: number;
@@ -26,6 +26,10 @@ export interface User {
   rol?: string;
   roles: string[];
   mfa_enabled?: boolean;
+  // Campos para médicos
+  id_especialidad?: number;
+  numero_tarjeta_profesional?: string;
+  años_experiencia?: number;
 }
 
 
@@ -140,9 +144,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           rol: data.user.rol || (data.user.roles && data.user.roles.length > 0 ? data.user.roles[0] : undefined),
           roles: data.user.roles || [],
           mfa_enabled: typeof data.user.mfa_enabled === 'boolean' ? data.user.mfa_enabled : false,
+          // Campos para médicos
+          id_especialidad: data.user.id_especialidad,
+          numero_tarjeta_profesional: data.user.numero_tarjeta_profesional,
+          años_experiencia: data.user.años_experiencia,
         };
         console.log(`[AuthContext] fetchAndSetUser (${operation}) - Datos del usuario procesados:`, userData);
-        setUser(userData);
+        setUser(userData); // Siempre establecer el usuario si los datos son válidos
         return userData;
       } else {
         console.warn(`[AuthContext] fetchAndSetUser (${operation}) - Datos del usuario no encontrados o error de API. Respuesta:`, data);
@@ -250,11 +258,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         rol: result.user.rol || (result.user.roles && result.user.roles.length > 0 ? result.user.roles[0] : undefined),
         roles: result.user.roles || [],
         mfa_enabled: typeof result.user.mfa_enabled === 'boolean' ? result.user.mfa_enabled : false,
+        // Campos para médicos
+        id_especialidad: result.user.id_especialidad,
+        numero_tarjeta_profesional: result.user.numero_tarjeta_profesional,
+        años_experiencia: result.user.años_experiencia,
       };
       console.log("[AuthContext] Login exitoso vía API. Datos del usuario:", loggedInUser);
-      setUser(loggedInUser); // Esto disparará el onAuthStateChanged indirectamente si el login en API actualiza Firebase
-                              // O directamente si la API devuelve el estado de Firebase y se confía en él.
-                              // En este caso, estamos seteando el usuario del contexto directamente.
+      
+      // Siempre establecer el usuario en el contexto.
+      // LoginPage manejará la lógica de mostrar el paso de MFA o redirigir.
+      setUser(loggedInUser);
+      
       setLoading(false); // Finalizar carga aquí
       return loggedInUser;
 

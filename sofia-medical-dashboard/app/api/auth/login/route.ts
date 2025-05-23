@@ -1,9 +1,18 @@
 // app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-// Asegúrate que getUser y getUserMfaConfig estén correctamente implementados en lib/db.ts
-import { getUser, getUserMfaConfig } from '../../../../lib/db';
+import { getUser, getUserMfaConfig, updateLastLoginInfo, getFullUserByFirebaseUID } from '../../../../lib/db'; // Añadir updateLastLoginInfo y getFullUserByFirebaseUID
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { app } from '../../../../lib/firebase';
+
+// Helper para normalizar IPs de loopback para comparación
+const normalizeIpForComparison = (ip: string | null | undefined): string | null => {
+  if (!ip) return null;
+  // Normaliza '::1' (IPv6 loopback) a '127.0.0.1' (IPv4 loopback) para que se consideren iguales
+  if (ip === '::1' || ip === '127.0.0.1') {
+    return '127.0.0.1';
+  }
+  return ip;
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,9 +32,10 @@ export async function POST(request: NextRequest) {
     console.log(`[Login API] Firebase sign in successful for UID: ${firebaseUser.uid}`);
 
     console.log(`[Login API] Fetching user data from DB for email: ${email}`);
-    const dbUser = await getUser(email);
+    // Usar getFullUserByFirebaseUID para obtener también la IP y ubicación
+    const dbUser = await getFullUserByFirebaseUID(firebaseUser.uid);
     if (!dbUser) {
-      console.error(`[Login API] User not found in DB for email: ${email}`);
+      console.error(`[Login API] User not found in DB for firebase_uid: ${firebaseUser.uid}`);
       return NextResponse.json(
         { error: 'Usuario no encontrado en la base de datos local' },
         { status: 404 }
@@ -40,6 +50,31 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
+
+    // --- Detección de IP Anómala (Solo para médicos) ---
+    const currentIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'UNKNOWN_IP';
+    const normalizedCurrentIp = normalizeIpForComparison(currentIp);
+    
+    if (dbUser.roles && dbUser.roles.includes('medico')) {
+      const lastLoginIp = dbUser.ultima_ip_login;
+      const normalizedLastLoginIp = normalizeIpForComparison(lastLoginIp);
+      const lastLoginLocation = dbUser.ultima_ubicacion_login; // Si se implementa la geolocalización
+
+      if (normalizedLastLoginIp && normalizedLastLoginIp !== normalizedCurrentIp) {
+        console.warn(`[Login API] ALERTA DE SEGURIDAD (Médico): Inicio de sesión desde una IP diferente para usuario ${email}. IP anterior: ${lastLoginIp} (normalizada: ${normalizedLastLoginIp}), IP actual: ${currentIp} (normalizada: ${normalizedCurrentIp})`);
+        // Aquí se podría implementar un desafío adicional, como enviar un correo de alerta.
+        // Por ahora, solo se registra y se permite el login.
+      } else if (!lastLoginIp) {
+        console.log(`[Login API] Primer inicio de sesión o IP no registrada para médico ${email}. Registrando IP actual: ${currentIp}`);
+      }
+
+      // Actualizar la última IP y actividad del usuario (solo si es médico)
+      await updateLastLoginInfo(dbUser.id_usuario, currentIp, 'UNKNOWN_LOCATION'); // 'UNKNOWN_LOCATION' por ahora
+      console.log(`[Login API] Última IP de login (${currentIp}) y actividad actualizadas para médico ID: ${dbUser.id_usuario}`);
+    } else {
+      console.log(`[Login API] Usuario ${email} no es médico. Omitiendo actualización de IP de login.`);
+    }
+    // --- FIN Detección de IP Anómala ---
 
     // --- OBTENER ESTADO DE MFA ---
     let mfaEnabledForUser = false;
@@ -69,7 +104,9 @@ export async function POST(request: NextRequest) {
       estado: dbUser.estado,
       firebase_uid: firebaseUser.uid,
       roles: dbUser.roles || [],
-      mfa_enabled: mfaEnabledForUser, // <--- AÑADIDO ESTADO MFA
+      mfa_enabled: mfaEnabledForUser,
+      ultima_ip_login: currentIp, // Incluir la IP actual en los datos del contexto
+      ultima_ubicacion_login: 'UNKNOWN_LOCATION', // Incluir la ubicación actual en los datos del contexto
     };
     
     // Verificación explícita del firebase_uid
@@ -79,11 +116,12 @@ export async function POST(request: NextRequest) {
       console.log('[Login API] Re-asignado firebase_uid desde Firebase:', userDataForContext.firebase_uid);
     }
     
-    console.log(`[Login API] Prepared user data for context (with MFA status):`);
+    console.log(`[Login API] Prepared user data for context (with MFA status and IP):`);
     console.log(`[Login API] - ID Usuario: ${userDataForContext.id_usuario}`);
     console.log(`[Login API] - Correo: ${userDataForContext.correo}`);
     console.log(`[Login API] - Firebase UID: ${userDataForContext.firebase_uid}`);
     console.log(`[Login API] - MFA Enabled: ${userDataForContext.mfa_enabled}`);
+    console.log(`[Login API] - Current IP: ${userDataForContext.ultima_ip_login}`);
 
     return NextResponse.json({ user: userDataForContext }, { status: 200 });
 

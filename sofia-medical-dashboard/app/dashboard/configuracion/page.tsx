@@ -1,6 +1,12 @@
 "use client"
 
 import React, { useEffect, useState, useRef } from "react"
+import { useTheme } from "next-themes"
+import { toast } from "sonner"
+import Swal from 'sweetalert2'
+import { AlertCircle, Save, User, Lock, Database, Shield, Zap, Loader2, CheckCircle, KeyRound } from "lucide-react"
+import QRCodeStyling from 'qr-code-styling'
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,20 +14,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
-import { useTheme } from "next-themes"
-import { useAuth, User as AuthUserInterface } from "@/context/AuthContext" // Renombrado para claridad
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { AlertCircle, Save, User, Lock, Database, Shield, Zap, Loader2, CheckCircle, KeyRound } from "lucide-react" 
-import QRCodeStyling from 'qr-code-styling';
+import { useAuth, User as AuthUserInterface } from "@/context/AuthContext"
 
 // Definir tipos para los estados para mejor claridad
 interface UserFormState {
-  nombre: string
-  email: string
-  especialidad: string
-  hospital: string
-  telefono: string
+  primer_nombre: string;
+  segundo_nombre: string | null;
+  primer_apellido: string;
+  segundo_apellido: string | null;
+  correo: string;
 }
 
 interface SeguridadState {
@@ -69,11 +72,11 @@ export default function ConfiguracionPage() {
   const { theme, setTheme } = useTheme();
 
   const [userForm, setUserForm] = useState<UserFormState>({
-    nombre: "",
-    email: "",
-    especialidad: "radiologia",
-    hospital: "Hospital Central",
-    telefono: "+1234567890",
+    primer_nombre: "",
+    segundo_nombre: null,
+    primer_apellido: "",
+    segundo_apellido: null,
+    correo: ""
   });
 
   const [seguridad, setSeguridad] = useState<SeguridadState>({
@@ -81,7 +84,7 @@ export default function ConfiguracionPage() {
   });
 
   const [sistema, setSistema] = useState<SistemaState>({
-    temaOscuro: theme === 'dark', // Initialize based on current theme
+    temaOscuro: false, // Inicializar en falso y dejar que useEffect lo sincronice
     altaResolucion: true, autoGuardado: true, tiempoAutoGuardado: "5",
   });
 
@@ -103,8 +106,11 @@ export default function ConfiguracionPage() {
       console.log("[ConfiguracionPage] useEffect[user] - User from AuthContext:", user);
       setUserForm(prev => ({
         ...prev,
-        nombre: `${user.primer_nombre || ''} ${user.primer_apellido || ''}`.trim(),
-        email: user.correo || '',
+        primer_nombre: user.primer_nombre || '',
+        segundo_nombre: user.segundo_nombre || null,
+        primer_apellido: user.primer_apellido || '',
+        segundo_apellido: user.segundo_apellido || null,
+        correo: user.correo || ''
       }));
 
       console.log("[ConfiguracionPage] useEffect[user] - Setting isMfaEnabledForUser based on user.mfa_enabled:", user.mfa_enabled);
@@ -115,10 +121,21 @@ export default function ConfiguracionPage() {
         setMfaCurrentStep('initial');
         setOtpauthUrl(null);
         setMfaError(null);
+        setManualSecret(null); // Asegura limpiar el secret manual
       } else {
         setMfaCurrentStep('initial');
         setOtpauthUrl(null);
+        setManualSecret(null);
       }
+
+      // Inicializar valores del formulario solo una vez al cargar el usuario
+      setUserForm({
+        primer_nombre: user.primer_nombre || '',
+        segundo_nombre: user.segundo_nombre || null,
+        primer_apellido: user.primer_apellido || '',
+        segundo_apellido: user.segundo_apellido || null,
+        correo: user.correo || ''
+      });
     } else {
       console.log("[ConfiguracionPage] useEffect[user] - No user from AuthContext.");
       setIsMfaEnabledForUser(false);
@@ -126,21 +143,47 @@ export default function ConfiguracionPage() {
     }
   }, [user]);
 
-  // Sync local 'temaOscuro' state with next-themes
+  // Sincronizar el estado local 'temaOscuro' con next-themes
   useEffect(() => {
-    setSistema(prev => ({ ...prev, temaOscuro: theme === 'dark' }));
+    // Asegurarse de que el estado del switch coincida con el tema actual
+    if (theme) {
+      setSistema(prev => ({ ...prev, temaOscuro: theme === 'dark' }));
+    }
   }, [theme]);
 
 
   const handleUserFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
-    setUserForm((prev) => ({ ...prev, [id]: value }));
+    if (id === 'segundo_nombre' || id === 'segundo_apellido') {
+      setUserForm((prev) => ({
+        ...prev,
+        [id]: value.trim() === '' ? null : value
+      }));
+    } else if (id === 'correo') {
+      setUserForm((prev) => ({
+        ...prev,
+        [id]: value.toLowerCase().trim()
+      }));
+    } else {
+      setUserForm((prev) => ({
+        ...prev,
+        [id]: value.trim()
+      }));
+    }
   };
 
-  const handleSelectChange = (id: keyof UserFormState | keyof SeguridadState | keyof SistemaState, value: string) => {
-    if (id in userForm) setUserForm((prev) => ({ ...prev, [id as keyof UserFormState]: value }));
-    else if (id in seguridad) setSeguridad((prev) => ({ ...prev, [id as keyof SeguridadState]: value }));
-    else if (id in sistema) setSistema((prev) => ({ ...prev, [id as keyof SistemaState]: value }));
+  const handleSelectChange = (id: keyof SeguridadState | keyof SistemaState, value: string) => {
+    if (id in seguridad) {
+      setSeguridad((prev) => ({
+        ...prev,
+        [id as keyof SeguridadState]: value
+      }));
+    } else if (id in sistema) {
+      setSistema((prev) => ({
+        ...prev,
+        [id as keyof SistemaState]: value
+      }));
+    }
   };
 
   const handleSwitchChange = (
@@ -263,6 +306,53 @@ export default function ConfiguracionPage() {
     }
   };
 
+  const handleSaveProfile = async () => {
+    try {
+      // Validar campos requeridos
+      if (!userForm.primer_nombre?.trim()) {
+        toast.error('El primer nombre es requerido');
+        return;
+      }
+      if (!userForm.primer_apellido?.trim()) {
+        toast.error('El primer apellido es requerido');
+        return;
+      }
+      if (!userForm.correo?.trim()) {
+        toast.error('El correo electrónico es requerido');
+        return;
+      }
+
+      // Validar formato de correo
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(userForm.correo)) {
+        toast.error('El formato del correo electrónico no es válido');
+        return;
+      }
+
+      const response = await fetch('/api/dashboard/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userForm),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Error al actualizar el perfil');
+      }
+
+      // Actualizar el contexto con los nuevos datos
+      await refreshUser();
+
+      toast.success('Perfil actualizado exitosamente');
+    } catch (error: any) {
+      console.error('Error al guardar el perfil:', error);
+      toast.error(error.message || 'Error al actualizar el perfil');
+    }
+  };
+
   if (authLoading) {
     return <div className="flex justify-center items-center h-screen dark:bg-gray-900"><Loader2 className="h-10 w-10 animate-spin text-teal-600 dark:text-teal-400" /> <p className="ml-3 text-lg dark:text-gray-300">Cargando...</p></div>;
   }
@@ -355,38 +445,53 @@ export default function ConfiguracionPage() {
                   <CardContent className="space-y-6 pt-4">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="nombre" className="dark:text-gray-300">Nombre Completo</Label>
-                        <Input id="nombre" value={userForm.nombre} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
+                        <Label htmlFor="primer_nombre" className="dark:text-gray-300">Primer Nombre</Label>
+                        <Input id="primer_nombre" value={userForm.primer_nombre} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="email" className="dark:text-gray-300">Correo Electrónico</Label>
-                        <Input id="email" type="email" value={userForm.email} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
+                        <Label htmlFor="segundo_nombre" className="dark:text-gray-300">Segundo Nombre</Label>
+                        <Input id="segundo_nombre" value={userForm.segundo_nombre || ""} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
                       </div>
                     </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="especialidad" className="dark:text-gray-300">Especialidad</Label>
-                        <Select value={userForm.especialidad} onValueChange={(value) => handleSelectChange("especialidad", value)}>
-                          <SelectTrigger id="especialidad" className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500"><SelectValue placeholder="Seleccione su especialidad" /></SelectTrigger>
-                          <SelectContent className="dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-                            <SelectItem value="radiologia">Radiología</SelectItem>
-                            <SelectItem value="cardiologia">Cardiología</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Label htmlFor="primer_apellido" className="dark:text-gray-300">Primer Apellido</Label>
+                        <Input id="primer_apellido" value={userForm.primer_apellido} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="hospital" className="dark:text-gray-300">Hospital/Clínica</Label>
-                        <Input id="hospital" value={userForm.hospital} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
+                        <Label htmlFor="segundo_apellido" className="dark:text-gray-300">Segundo Apellido</Label>
+                        <Input id="segundo_apellido" value={userForm.segundo_apellido || ""} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="telefono" className="dark:text-gray-300">Teléfono</Label>
-                      <Input id="telefono" value={userForm.telefono} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
+                      <Label htmlFor="correo" className="dark:text-gray-300">Correo Electrónico</Label>
+                      <Input id="correo" type="email" value={userForm.correo} onChange={handleUserFormChange} className="border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:border-teal-500 focus:ring-teal-500" />
                     </div>
                   </CardContent>
                   <CardFooter className="flex justify-end gap-4 bg-gray-50 dark:bg-gray-700/50 dark:border-t dark:border-gray-600">
-                    <Button variant="outline" className="dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Cancelar</Button>
-                    <Button className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600"><Save className="mr-2 h-4 w-4" /> Guardar Cambios</Button>
+                    <Button 
+                      variant="outline" 
+                      className="dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+                      onClick={() => {
+                        if (user) {
+                          setUserForm({
+                            primer_nombre: user.primer_nombre || '',
+                            segundo_nombre: user.segundo_nombre || null,
+                            primer_apellido: user.primer_apellido || '',
+                            segundo_apellido: user.segundo_apellido || null,
+                            correo: user.correo || ''
+                          });
+                        }
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button 
+                      onClick={handleSaveProfile} 
+                      className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600"
+                    >
+                      <Save className="mr-2 h-4 w-4" /> Guardar Cambios
+                    </Button>
                   </CardFooter>
                 </Card>
               </div>
@@ -542,7 +647,29 @@ export default function ConfiguracionPage() {
                   </div>
                 </CardContent>
                 <CardFooter className="flex justify-end bg-gray-50 dark:bg-gray-700/50 dark:border-t dark:border-gray-600">
-                  <Button className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600"><Save className="mr-2 h-4 w-4" /> Guardar Configuración</Button>
+                  <Button
+                    className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600"
+                    onClick={() => {
+                      Swal.fire({
+                        title: '¡Configuración guardada!',
+                        text: 'Los cambios del sistema se han aplicado correctamente',
+                        icon: 'success',
+                        timer: 5000,
+                        timerProgressBar: true,
+                        showConfirmButton: true,
+                        confirmButtonText: 'Aceptar',
+                        confirmButtonColor: '#0d9488',
+                        background: 'hsl(var(--background))',
+                        color: 'hsl(var(--foreground))',
+                        customClass: {
+                          popup: 'dark:bg-gray-800 dark:text-white border dark:border-gray-700',
+                          confirmButton: 'dark:!bg-teal-600 dark:hover:!bg-teal-700'
+                        }
+                      });
+                    }}
+                  >
+                    <Save className="mr-2 h-4 w-4" /> Guardar Configuración
+                  </Button>
                 </CardFooter>
               </Card>
             </TabsContent>

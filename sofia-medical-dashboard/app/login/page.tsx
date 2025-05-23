@@ -32,7 +32,7 @@ import { app } from "@/lib/firebase";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, user: contextUser, loading: authLoading } = useAuth();
+  const { login, user: contextUser, loading: authLoading, refreshUser } = useAuth(); // Añadir refreshUser
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -54,8 +54,20 @@ export default function LoginPage() {
   const authInstance = getAuth(app);
 
   useEffect(() => {
-    if (!authLoading && contextUser && !showMfaStep) {
-      router.push("/dashboard");
+    // Redirigir al dashboard solo si el usuario está autenticado Y MFA no está habilitado
+    // O si MFA está habilitado y ya se ha completado la verificación (lo cual se maneja en handleTotpVerification)
+    if (!authLoading && contextUser) {
+      if (!contextUser.mfa_enabled) {
+        console.log("[LoginPage] Redirigiendo: Usuario autenticado y MFA no habilitado.");
+        router.push("/dashboard");
+      } else if (contextUser.mfa_enabled && !showMfaStep) {
+        // Si MFA está habilitado y no estamos en el paso de MFA (ej. recarga de página con sesión persistente)
+        // entonces debemos mostrar el paso de MFA.
+        // Esto es crucial para que el usuario no se salte el MFA si ya tiene una sesión de Firebase.
+        console.log("[LoginPage] Usuario con MFA habilitado detectado. Mostrando paso de TOTP.");
+        setMfaUserUid(contextUser.firebase_uid);
+        setShowMfaStep(true);
+      }
     }
   }, [contextUser, authLoading, router, showMfaStep]);
 
@@ -146,11 +158,12 @@ export default function LoginPage() {
       }
 
       if (data.success) {
-        console.log("[LoginPage] Verificación TOTP exitosa. Redirigiendo al dashboard.");
+        console.log("[LoginPage] Verificación TOTP exitosa. Refrescando datos del usuario y redirigiendo.");
+        await refreshUser(); // Refrescar el usuario en el contexto para que se establezca y active la redirección
         setShowMfaStep(false);
         setTotpCode("");
         setMfaUserUid(null);
-        router.push("/dashboard");
+        router.push("/dashboard"); // Redirigir explícitamente al dashboard
       } else {
         console.warn("[LoginPage] La verificación MFA no fue exitosa:", data.message);
         setTotpError(data.message || "La verificación MFA falló por una razón desconocida.");

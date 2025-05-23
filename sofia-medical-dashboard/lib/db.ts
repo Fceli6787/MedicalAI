@@ -201,19 +201,76 @@ export async function getTipoExamenPorNombre(nombre: string): Promise<number | n
   try {
     dbClient = await getConnection();
     const nombreNormalizado = nombre.toLowerCase().trim();
-    // Intenta obtener directamente por nombre normalizado si la BD lo soporta o si tienes un índice adecuado
-    // const tipoExamenResult = await dbClient.sql('SELECT id_tipo_examen FROM tiposexamen WHERE LOWER(TRIM(nombre)) = ?', [nombreNormalizado]);
-    // Si no, trae todos y filtra en JS (menos eficiente para tablas grandes)
+    console.log(`[DEBUG getTipoExamenPorNombre] Buscando tipo de examen para nombre: '${nombre}' (normalizado: '${nombreNormalizado}')`);
+    
+    // Primero intentamos buscar el tipo de examen exacto
     const allTiposResult = await dbClient.sql('SELECT id_tipo_examen, nombre FROM tiposexamen');
 
-    if (!Array.isArray(allTiposResult)) return null;
+    if (!Array.isArray(allTiposResult)) {
+      console.warn('[DEBUG getTipoExamenPorNombre] No se pudo obtener la lista de tipos de examen');
+      return null;
+    }
 
+    // Primero buscamos una coincidencia exacta
     const foundTipo = allTiposResult.find(tipo =>
         typeof tipo.nombre === 'string' && tipo.nombre.toLowerCase().trim() === nombreNormalizado
     );
-    return foundTipo ? Number(foundTipo.id_tipo_examen) : null;
+
+    if (foundTipo) {
+      console.log(`[DEBUG getTipoExamenPorNombre] Encontrada coincidencia exacta con ID: ${foundTipo.id_tipo_examen}`);
+      return Number(foundTipo.id_tipo_examen);
+    }
+
+    // Si no hay coincidencia exacta, verificamos si es una variante de "otro"
+    const esVarianteOtro = ['otro', 'otra', 'otros', 'otras', 'other'].includes(nombreNormalizado);
+    
+    if (esVarianteOtro) {
+      console.log('[DEBUG getTipoExamenPorNombre] El nombre es una variante de "otro", buscando tipo genérico "Otro"');
+      
+      // Buscamos si ya existe un tipo "Otro" (considerando variaciones)
+      const otroTipo = allTiposResult.find(tipo =>
+          typeof tipo.nombre === 'string' && ['otro', 'otra', 'otros', 'otras', 'other']
+          .includes(tipo.nombre.toLowerCase().trim())
+      );
+
+      if (otroTipo) {
+        console.log(`[DEBUG getTipoExamenPorNombre] Encontrado tipo "Otro" existente con ID: ${otroTipo.id_tipo_examen}`);
+        return Number(otroTipo.id_tipo_examen);
+      }
+
+      // Si no existe, lo creamos
+      console.log('[DEBUG getTipoExamenPorNombre] Creando nuevo tipo "Otro"');
+      const insertResult = await dbClient.sql(
+        'INSERT INTO tiposexamen (nombre, descripcion, estado) VALUES (?, ?, ?) RETURNING id_tipo_examen',
+        'Otro',
+        'Otros tipos de exámenes no categorizados',
+        'Activo'
+      );
+
+      // Intentar obtener el ID del nuevo registro
+      let nuevoId: number | undefined;
+      
+      if (insertResult && Array.isArray(insertResult) && insertResult.length > 0 && insertResult[0].id_tipo_examen) {
+        nuevoId = Number(insertResult[0].id_tipo_examen);
+      }
+
+      if (!nuevoId) {
+        const lastIdResult = await dbClient.sql('SELECT last_insert_rowid() as id');
+        if (lastIdResult && lastIdResult.length > 0 && lastIdResult[0].id !== undefined) {
+          nuevoId = Number(lastIdResult[0].id);
+        }
+      }
+
+      if (nuevoId) {
+        console.log(`[DEBUG getTipoExamenPorNombre] Creado nuevo tipo "Otro" con ID: ${nuevoId}`);
+        return nuevoId;
+      }
+    }
+
+    console.warn(`[DEBUG getTipoExamenPorNombre] No se encontró coincidencia para '${nombre}' y no es una variante de "otro"`);
+    return null;
   } catch (error: any) {
-    console.error(`Error en getTipoExamenPorNombre para '${nombre}':`, error.message);
+    console.error(`[ERROR getTipoExamenPorNombre] Error para '${nombre}':`, error.message);
     throw error;
   }
 }
@@ -884,12 +941,30 @@ export const registerPacienteBasico = async (paciente: {
     if (newUserId === undefined) {
       throw new Error('Failed to retrieve new user ID after insertion using RETURNING or last_insert_rowid().');
     }
-    console.log(`registerPacienteBasico - newUserId: ${newUserId}`);
+    console.log(`registerPacienteBasico - newUserId: ${newUserId}`);    // Buscar el ID del rol de paciente
+    // Buscar directamente por ID conocido del rol paciente (id_rol=3)
+    const roleResult = await dbClient.sql(`SELECT id_rol FROM roles WHERE id_rol = 3 AND nombre = 'paciente'`);
+    let roleId: number | undefined;
+    let rolesArray: any[] = [];
 
-    const roleResult = await dbClient.sql(`SELECT id_rol FROM roles WHERE nombre = ?`, ['paciente']);
-    const roleId = roleResult?.[0]?.id_rol;
-    if (!roleId) {
-      throw new Error('Role \'paciente\' not found');
+    if (Array.isArray(roleResult)) {
+        rolesArray = roleResult;
+    } else if (roleResult && typeof roleResult === 'object') {
+        if (Array.isArray((roleResult as any).rows)) {
+            rolesArray = (roleResult as any).rows;
+        } else if (Array.isArray((roleResult as any)._rows)) {
+            rolesArray = (roleResult as any)._rows;
+        } else if (typeof (roleResult as any).length === 'number') {
+            rolesArray = Array.from(roleResult as any);
+        }
+    }
+
+    if (rolesArray.length > 0 && rolesArray[0]?.id_rol !== undefined) {
+        roleId = rolesArray[0].id_rol;
+        console.log(`Rol 'paciente' encontrado con ID: ${roleId}`);
+    } else {
+        console.error('Role \'paciente\' not found. DB result:', JSON.stringify(roleResult, null, 2));
+        throw new Error('Role \'paciente\' not found');
     }
     console.log(`registerPacienteBasico - roleId for paciente: ${roleId}`);
 
@@ -1460,6 +1535,8 @@ interface FullUserFromDB {
   estado: string;
   firebase_uid: string;
   roles: string[];
+  ultima_ip_login?: string | null;
+  ultima_ubicacion_login?: string | null;
 }
 
 export const getFullUserByFirebaseUID = async (firebaseUid: string): Promise<FullUserFromDB | null> => {
@@ -1484,7 +1561,8 @@ export const getFullUserByFirebaseUID = async (firebaseUid: string): Promise<Ful
       SELECT
         u.id_usuario, u.id_tipo_documento, u.id_pais, u.nui,
         u.primer_nombre, u.segundo_nombre, u.primer_apellido, u.segundo_apellido,
-        u.correo, u.fecha_registro, u.ultima_actividad, u.estado, u.firebase_uid
+        u.correo, u.fecha_registro, u.ultima_actividad, u.estado, u.firebase_uid,
+        u.ultima_ip_login, u.ultima_ubicacion_login
       FROM usuarios u
       WHERE u.firebase_uid = ?
     `;
@@ -1585,6 +1663,8 @@ export const getFullUserByFirebaseUID = async (firebaseUid: string): Promise<Ful
       estado: String(userDataRow.estado),
       firebase_uid: String(userDataRow.firebase_uid),
       roles: userRoles,
+      ultima_ip_login: userDataRow.ultima_ip_login ? String(userDataRow.ultima_ip_login) : null,
+      ultima_ubicacion_login: userDataRow.ultima_ubicacion_login ? String(userDataRow.ultima_ubicacion_login) : null,
     };
     console.log(`[DB getFullUserByFirebaseUID] Usuario completo ensamblado:`, JSON.stringify(fullUser, null, 2));
     return fullUser;
@@ -1594,6 +1674,28 @@ export const getFullUserByFirebaseUID = async (firebaseUid: string): Promise<Ful
     return null;
   }
 };
+
+export async function updateLastLoginInfo(id_usuario: number, ip_address: string, location_info: string | null = null): Promise<boolean> {
+  let dbClient: Database | undefined;
+  try {
+    dbClient = await getConnection();
+    console.log(`[DB updateLastLoginInfo] Actualizando última IP/ubicación para usuario ID: ${id_usuario}`);
+
+    const result = await dbClient.sql(
+      `UPDATE usuarios
+       SET ultima_ip_login = ?, ultima_ubicacion_login = ?, ultima_actividad = CURRENT_TIMESTAMP
+       WHERE id_usuario = ?`,
+      ip_address,
+      location_info,
+      id_usuario
+    );
+
+    return result.changes > 0;
+  } catch (error: any) {
+    console.error('Error en updateLastLoginInfo:', error.message, error.stack);
+    return false;
+  }
+}
 
 // Agrega esta interfaz cerca de tus otras interfaces si es necesario,
 // o asegúrate de que los campos coincidan con lo que PacientesPage.tsx espera.
@@ -1828,5 +1930,71 @@ export async function deletePaciente(id_usuario: number): Promise<boolean> {
         console.error(`[DB deletePaciente] FALLO DE RESTRICCIÓN DE CLAVE FORÁNEA: Asegúrate que ON DELETE CASCADE esté configurado para todas las tablas que referencian a 'usuarios.id_usuario' (ej. diagnosticos, medicos, etc.) o elimina los registros dependientes manualmente ANTES de llamar a deletePaciente o dentro de esta función.`);
     }
     throw error; // Relanzar para que la API route lo maneje
+  }
+}
+
+// Función para actualizar el perfil de usuario
+export interface UpdateUserProfileData {
+  primer_nombre: string;
+  segundo_nombre: string | null;
+  primer_apellido: string;
+  segundo_apellido: string | null;
+  correo: string;
+  id_especialidad?: number;
+  numero_tarjeta_profesional?: string;
+  años_experiencia?: number;
+}
+
+export async function updateUserProfile(firebaseUid: string, data: UpdateUserProfileData) {
+  console.log('db.updateUserProfile - Iniciando actualización para usuario:', firebaseUid);
+  
+  const client = await getClient();
+  console.log('db.updateUserProfile - Datos a actualizar:', data);
+
+  try {
+    // Validar que el usuario existe
+    const [userExists] = await client.sql(
+      'SELECT id_usuario, firebase_uid FROM usuarios WHERE firebase_uid = ?',
+      [firebaseUid]
+    );
+
+    if (!userExists) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    const { id_usuario } = userExists;
+
+    // Actualizar datos básicos del usuario
+    await client.sql(
+      `UPDATE usuarios 
+       SET primer_nombre = ?, 
+           segundo_nombre = ?, 
+           primer_apellido = ?, 
+           segundo_apellido = ?, 
+           correo = ? 
+       WHERE id_usuario = ?`,
+      [
+        data.primer_nombre,
+        data.segundo_nombre,
+        data.primer_apellido,
+        data.segundo_apellido,
+        data.correo,
+        id_usuario
+      ]
+    );
+    console.log('db.updateUserProfile - Datos básicos actualizados para usuario:', id_usuario);
+
+    // Obtener datos actualizados para retornar
+    const [updatedUser] = await client.sql(
+      `SELECT * FROM usuarios WHERE id_usuario = ?`,
+      [id_usuario]
+    );
+
+    console.log('db.updateUserProfile - Actualización completada exitosamente');
+    return updatedUser;
+
+  } catch (error) {
+    console.error('db.updateUserProfile - Error:', error);
+    throw error;
   }
 }

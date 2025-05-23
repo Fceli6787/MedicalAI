@@ -321,6 +321,8 @@ CREATE TABLE `usuarios` (
   `fecha_registro` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `ultima_actividad` DATETIME DEFAULT NULL,
   `estado` TEXT DEFAULT 'Activo' CHECK (`estado` IN ('Activo', 'Inactivo', 'Bloqueado')),
+  'ultima_ip_login' TEXT;
+  'ultima_ubicacion_login' TEXT;
   PRIMARY KEY (`id_usuario`),
   UNIQUE (`correo`),
   FOREIGN KEY (`id_tipo_documento`) REFERENCES `tiposdocumento` (`id_tipo_documento`),
