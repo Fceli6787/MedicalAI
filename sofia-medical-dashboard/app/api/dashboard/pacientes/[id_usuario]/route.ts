@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-// Asume que tienes funciones en db.ts para estas operaciones
-import { getPacienteById, updatePaciente, deletePaciente } from '../../../../../lib/db'; 
-// Asegúrate que la ruta a db.ts sea correcta.
-// Puede que necesites crear estas funciones en lib/db.ts si no existen.
+import { getConnection } from '../../../../../lib/db';
+import { IPacienteRepository, PacienteRepository } from '../../../../../lib/repositories/pacienteRepository';
+import { IMetadataRepository, MetadataRepository } from '../../../../../lib/repositories/metadataRepository';
+import { IUserRepository, UserRepository } from '../../../../../lib/repositories/userRepository';
 
 interface PacienteData {
   // Define aquí todos los campos que esperas recibir para actualizar un paciente
@@ -27,57 +27,57 @@ interface PacienteData {
 }
 
 
-// GET: Obtener un paciente por ID
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id_usuario: string } }
-) {
-  try {
-    const id_usuario = parseInt(params.id_usuario, 10);
-    if (isNaN(id_usuario)) {
-      return NextResponse.json({ error: 'ID de usuario inválido.' }, { status: 400 });
-    }
+async function getPacienteRepositoryInstance(): Promise<IPacienteRepository> {
+  const dbClient = await getConnection();
+  const metadataRepository = new MetadataRepository(dbClient);
+  const userRepository = new UserRepository(dbClient);
+  return new PacienteRepository(dbClient, metadataRepository, userRepository);
+}
 
-    // Llama a tu función de base de datos para obtener el paciente
-    // Esta función debería hacer un JOIN entre 'usuarios' y 'pacientes'
-    // y también obtener los códigos de tipo_documento y pais.
-    const paciente = await getPacienteById(id_usuario); 
+// GET: Obtener un paciente por ID
+export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
+  const id_usuario = parseInt(url.pathname.split('/').pop() || '', 10);
+  if (isNaN(id_usuario)) {
+    return NextResponse.json({ error: 'ID de usuario inválido.' }, { status: 400 });
+  }
+
+  try {
+    const pacienteRepo = await getPacienteRepositoryInstance();
+    const paciente = await pacienteRepo.getPacienteById(id_usuario);
 
     if (!paciente) {
       return NextResponse.json({ error: 'Paciente no encontrado.' }, { status: 404 });
     }
-    // Devuelve el paciente. Asegúrate que los nombres de campo coincidan con lo que espera el frontend
-    // o transforma los nombres aquí. Por ejemplo, si la BD tiene 'correo' y el frontend espera 'email'.
     return NextResponse.json({ paciente });
 
   } catch (error: any) {
-    console.error(`Error fetching paciente con ID ${params.id_usuario}:`, error);
+    console.error(`Error fetching paciente con ID ${id_usuario}:`, error);
     return NextResponse.json({ error: error.message || 'Error al obtener el paciente.' }, { status: 500 });
   }
 }
 
 // PUT: Actualizar un paciente por ID
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id_usuario: string } }
-) {
-  try {
-    const id_usuario = parseInt(params.id_usuario, 10);
-    if (isNaN(id_usuario)) {
-      return NextResponse.json({ error: 'ID de usuario inválido.' }, { status: 400 });
-    }
+export async function PUT(request: NextRequest) {
+  const url = new URL(request.url);
+  const id_usuario = parseInt(url.pathname.split('/').pop() || '', 10);
+  if (isNaN(id_usuario)) {
+    return NextResponse.json({ error: 'ID de usuario inválido.' }, { status: 400 });
+  }
 
+  try {
     const data = await request.json() as PacienteData;
 
     // Validaciones básicas (puedes expandirlas)
     if (!data.primer_nombre || !data.primer_apellido || !data.email || !data.nui || !data.tipoDocumentoCodigo || !data.paisCodigo) {
         return NextResponse.json({ error: 'Faltan campos requeridos para la actualización.' }, { status: 400 });
     }
-    
+
     // Llama a tu función de base de datos para actualizar el paciente
     // Esta función necesitará manejar la actualización en 'usuarios' y 'pacientes'
     // y convertir códigos (tipoDocumentoCodigo, paisCodigo) a IDs si es necesario.
-    const updatedPaciente = await updatePaciente(id_usuario, data);
+    const pacienteRepo = await getPacienteRepositoryInstance();
+    const updatedPaciente = await pacienteRepo.updatePaciente(id_usuario, data);
 
     if (!updatedPaciente) {
       // Esto podría significar que el paciente no existía o la actualización falló por otra razón
@@ -86,25 +86,24 @@ export async function PUT(
     return NextResponse.json({ message: 'Paciente actualizado exitosamente.', paciente: updatedPaciente });
 
   } catch (error: any) {
-    console.error(`Error updating paciente con ID ${params.id_usuario}:`, error);
+    console.error(`Error updating paciente con ID ${id_usuario}:`, error);
     return NextResponse.json({ error: error.message || 'Error al actualizar el paciente.' }, { status: 500 });
   }
 }
 
 // DELETE: Eliminar un paciente por ID
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id_usuario: string } }
-) {
-  try {
-    const id_usuario = parseInt(params.id_usuario, 10);
-    if (isNaN(id_usuario)) {
-      return NextResponse.json({ error: 'ID de usuario inválido.' }, { status: 400 });
-    }
+export async function DELETE(request: NextRequest) {
+  const url = new URL(request.url);
+  const id_usuario = parseInt(url.pathname.split('/').pop() || '', 10);
+  if (isNaN(id_usuario)) {
+    return NextResponse.json({ error: 'ID de usuario inválido.' }, { status: 400 });
+  }
 
+  try {
     // Llama a tu función de base de datos para eliminar el paciente
     // Asegúrate de manejar la eliminación en cascada o las dependencias correctamente.
-    const success = await deletePaciente(id_usuario);
+    const pacienteRepo = await getPacienteRepositoryInstance();
+    const success = await pacienteRepo.deletePaciente(id_usuario);
 
     if (!success) {
       // Podría ser que el paciente no existiera o la eliminación fallara.
@@ -113,7 +112,7 @@ export async function DELETE(
     return NextResponse.json({ message: 'Paciente eliminado exitosamente.' });
 
   } catch (error: any) {
-    console.error(`Error deleting paciente con ID ${params.id_usuario}:`, error);
+    console.error(`Error deleting paciente con ID ${id_usuario}:`, error);
     return NextResponse.json({ error: error.message || 'Error al eliminar el paciente.' }, { status: 500 });
   }
 }

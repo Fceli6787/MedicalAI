@@ -469,12 +469,22 @@ export default function PacientesPage() {
   }, []); // setNewPatient es estable
 
   const handleAddPatientSubmit = async () => {
-    if (!newPatient.primer_nombre || !newPatient.primer_apellido || !newPatient.tipoDocumentoCodigo || !newPatient.paisCodigo || !newPatient.email || !newPatient.nui) {
-        toast({ title: "Campos Requeridos", description: "Por favor, complete todos los campos obligatorios.", variant: "destructive" });
+    // Validación robusta usando trim() para los campos de texto
+    if (!newPatient.primer_nombre?.trim() || 
+        !newPatient.primer_apellido?.trim() || 
+        !newPatient.tipoDocumentoCodigo || 
+        !newPatient.paisCodigo || 
+        !newPatient.email?.trim() || 
+        !newPatient.nui?.trim()) {
+        toast({ title: "Campos Requeridos", description: "Por favor, complete todos los campos obligatorios (nombre, apellido, tipo documento, país, email, NUI).", variant: "destructive" });
         return;
     }
     const temporaryPassword = Math.random().toString(36).slice(-8);
-    const patientDataForApi = { ...newPatient, password: temporaryPassword };
+    const patientDataForApi = {
+      ...newPatient,
+      password: temporaryPassword,
+      roles: ['paciente']
+    };
     try {
       setIsSavingEditData(true);
       const response = await fetch("/api/pacientes/register", {
@@ -484,12 +494,12 @@ export default function PacientesPage() {
       });
       const result = await response.json();
       setIsSavingEditData(false);
-      
+
       if (response.ok) {
         setIsAddDialogOpen(false);
         setNewPatient({...initialPatientFormState});
         fetchData();
-        
+
         Swal.fire({
           icon: 'success',
           title: '¡Paciente Registrado!',
@@ -497,9 +507,6 @@ export default function PacientesPage() {
           showConfirmButton: false,
           timer: 2000
         });
-        setIsAddDialogOpen(false);
-        setNewPatient({...initialPatientFormState});
-        fetchData();
       } else {
         Swal.fire({ icon: 'error', title: 'Error al agregar paciente', text: result.error || "Ocurrió un error al registrar el paciente." });
       }

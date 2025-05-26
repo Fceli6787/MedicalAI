@@ -25,6 +25,29 @@ interface DiagnosticoPostData {
   diagnosisAIResult: DiagnosisAIResult;
 }
 
+function validateDiagnosticoPostData(data: any) {
+  if (!data || typeof data !== 'object') {
+    return { error: 'Cuerpo de la solicitud inválido o vacío.', status: 400 };
+  }
+  const { id_paciente, id_medico, tipoExamenNombre, diagnosisAIResult } = data;
+  if (id_paciente === undefined || id_paciente === null) {
+    return { error: 'Falta el campo obligatorio: id_paciente', status: 400 };
+  }
+  if (id_medico === undefined || id_medico === null) {
+    return { error: 'Falta el campo obligatorio: id_medico', status: 400 };
+  }
+  if (!tipoExamenNombre) {
+    return { error: 'Falta el campo obligatorio: tipoExamenNombre', status: 400 };
+  }
+  if (!diagnosisAIResult) {
+    return { error: 'Falta el campo obligatorio: diagnosisAIResult', status: 400 };
+  }
+  if (diagnosisAIResult.condition === undefined && diagnosisAIResult.description === undefined) {
+    return { error: 'El objeto diagnosisAIResult debe contener al menos condition o description.', status: 400 };
+  }
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log('API POST /api/diagnosticos - Solicitud recibida.');
@@ -32,8 +55,9 @@ export async function POST(request: NextRequest) {
     const requestBody = await request.json(); 
     console.log('API POST /api/diagnosticos - Cuerpo de la solicitud:', JSON.stringify(requestBody, null, 2));
 
-    if (!requestBody || typeof requestBody !== 'object') {
-      return NextResponse.json({ error: 'Cuerpo de la solicitud inválido o vacío.' }, { status: 400 });
+    const validation = validateDiagnosticoPostData(requestBody);
+    if (validation) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status });
     }
 
     // Extraer datos del cuerpo JSON
@@ -46,24 +70,6 @@ export async function POST(request: NextRequest) {
       originalFileName,
       diagnosisAIResult,
     } = requestBody as DiagnosticoPostData;
-
-    // Validar campos obligatorios básicos
-    if (id_paciente === undefined || id_paciente === null) {
-      return NextResponse.json({ error: 'Falta el campo obligatorio: id_paciente' }, { status: 400 });
-    }
-    if (id_medico === undefined || id_medico === null) {
-      return NextResponse.json({ error: 'Falta el campo obligatorio: id_medico' }, { status: 400 });
-    }
-    if (!tipoExamenNombre) {
-      return NextResponse.json({ error: 'Falta el campo obligatorio: tipoExamenNombre' }, { status: 400 });
-    }
-    if (!diagnosisAIResult) {
-      return NextResponse.json({ error: 'Falta el campo obligatorio: diagnosisAIResult' }, { status: 400 });
-    }
-    // Validar que el resultado de la IA tenga al menos condición o descripción
-    if (diagnosisAIResult.condition === undefined && diagnosisAIResult.description === undefined) {
-        return NextResponse.json({ error: 'El objeto diagnosisAIResult debe contener al menos condition o description.' }, { status: 400 });
-    }
 
     // Llamar a la función addDiagnosticoCompleto de lib/db.ts
     console.log('API POST /api/diagnosticos - Llamando a addDiagnosticoCompleto...');

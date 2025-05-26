@@ -25,6 +25,7 @@ import { EyeIcon, EyeOffIcon, FileText, UserCircle, Award, Mail, AlertCircle, Ch
 import Link from "next/link";
 import Image from "next/image";
 import { useState, useEffect } from "react";
+import { Turnstile } from '@marsidev/react-turnstile';
 import { useAuth, User as AuthUserType } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { getAuth, sendPasswordResetEmail, AuthError } from "firebase/auth";
@@ -32,12 +33,13 @@ import { app } from "@/lib/firebase";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, user: contextUser, loading: authLoading, refreshUser } = useAuth(); // Añadir refreshUser
+  const { login, user: contextUser, loading: authLoading, refreshUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
@@ -54,16 +56,11 @@ export default function LoginPage() {
   const authInstance = getAuth(app);
 
   useEffect(() => {
-    // Redirigir al dashboard solo si el usuario está autenticado Y MFA no está habilitado
-    // O si MFA está habilitado y ya se ha completado la verificación (lo cual se maneja en handleTotpVerification)
     if (!authLoading && contextUser) {
       if (!contextUser.mfa_enabled) {
         console.log("[LoginPage] Redirigiendo: Usuario autenticado y MFA no habilitado.");
         router.push("/dashboard");
       } else if (contextUser.mfa_enabled && !showMfaStep) {
-        // Si MFA está habilitado y no estamos en el paso de MFA (ej. recarga de página con sesión persistente)
-        // entonces debemos mostrar el paso de MFA.
-        // Esto es crucial para que el usuario no se salte el MFA si ya tiene una sesión de Firebase.
         console.log("[LoginPage] Usuario con MFA habilitado detectado. Mostrando paso de TOTP.");
         setMfaUserUid(contextUser.firebase_uid);
         setShowMfaStep(true);
@@ -78,8 +75,14 @@ export default function LoginPage() {
     setTotpError("");
     setShowMfaStep(false);
 
+    if (!turnstileToken) {
+      setError("Por favor, completa la verificación de seguridad.");
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const loggedInUser = await login(email, password);
+      const loggedInUser = await login(email, password, turnstileToken);
 
       if (loggedInUser) {
         console.log("[LoginPage] Login de contraseña exitoso. Usuario:", loggedInUser);
@@ -92,7 +95,7 @@ export default function LoginPage() {
           router.push("/dashboard");
         }
       } else {
-        if (!error) { 
+        if (!error) {
           setError("Fallo el inicio de sesión. Por favor, verifica tus credenciales.");
         }
       }
@@ -106,25 +109,25 @@ export default function LoginPage() {
 
   const handleTotpVerification = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
+
     if (!mfaUserUid) {
       console.error("[LoginPage] Error: firebase_uid no disponible para verificación MFA");
       setTotpError("Error de autenticación: Identificador de usuario no disponible. Por favor, inicia sesión nuevamente.");
       return;
     }
-    
+
     if (!totpCode) {
       console.error("[LoginPage] Error: Código TOTP vacío");
       setTotpError("Por favor, ingresa el código de verificación de 6 dígitos.");
       return;
     }
-    
+
     if (!/^\d{6}$/.test(totpCode)) {
       console.error("[LoginPage] Error: Formato de código TOTP inválido:", totpCode);
       setTotpError("El código debe contener exactamente 6 dígitos numéricos.");
       return;
     }
-    
+
     console.log(`[LoginPage] Iniciando verificación MFA para usuario con firebase_uid: ${mfaUserUid}`);
     setIsVerifyingTotp(true);
     setTotpError("");
@@ -132,16 +135,16 @@ export default function LoginPage() {
     try {
       const payload = {
         firebase_uid: mfaUserUid,
-        token: totpCode
+        token: totpCode,
       };
       console.log("[LoginPage] Enviando datos de verificación MFA:", JSON.stringify(payload, null, 2));
-      
+
       const response = await fetch('/api/mfa/login-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      
+
       const dataText = await response.text();
       let data;
       try {
@@ -159,11 +162,11 @@ export default function LoginPage() {
 
       if (data.success) {
         console.log("[LoginPage] Verificación TOTP exitosa. Refrescando datos del usuario y redirigiendo.");
-        await refreshUser(); // Refrescar el usuario en el contexto para que se establezca y active la redirección
+        await refreshUser();
         setShowMfaStep(false);
         setTotpCode("");
         setMfaUserUid(null);
-        router.push("/dashboard"); // Redirigir explícitamente al dashboard
+        router.push("/dashboard");
       } else {
         console.warn("[LoginPage] La verificación MFA no fue exitosa:", data.message);
         setTotpError(data.message || "La verificación MFA falló por una razón desconocida.");
@@ -187,7 +190,7 @@ export default function LoginPage() {
     setResetSuccessMessage("");
     setResetErrorMessage("");
     try {
-      await sendPasswordResetEmail(authInstance, resetEmail); 
+      await sendPasswordResetEmail(authInstance, resetEmail);
       setResetSuccessMessage(
         "Se ha enviado un enlace para restablecer tu contraseña a tu correo electrónico. Por favor, revisa tu bandeja de entrada (y la carpeta de spam)."
       );
@@ -208,7 +211,7 @@ export default function LoginPage() {
     }
   };
 
-  if (authLoading && !showMfaStep) { 
+  if (authLoading && !showMfaStep) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-teal-50 to-white dark:from-gray-900 dark:to-gray-800">
         <Loader2 className="h-12 w-12 text-teal-600 dark:text-teal-400 animate-spin" />
@@ -252,9 +255,9 @@ export default function LoginPage() {
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {error && (
                     <Alert variant="destructive" className="dark:bg-red-900/30 dark:border-red-700 dark:text-red-300">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>Error de Inicio de Sesión</AlertTitle>
-                        <AlertDescription>{error}</AlertDescription>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Error de Inicio de Sesión</AlertTitle>
+                      <AlertDescription>{error}</AlertDescription>
                     </Alert>
                   )}
                   <div className="space-y-2">
@@ -275,7 +278,21 @@ export default function LoginPage() {
                       </button>
                     </div>
                   </div>
-                  <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600 text-white font-semibold py-2.5 rounded-md" disabled={isLoading}>
+                  <div className="flex justify-center my-4">
+                    <Turnstile
+                      siteKey={process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY || ''}
+                      onSuccess={(token: string) => {
+                        setTurnstileToken(token);
+                        setError("");
+                      }}
+                      onExpire={() => setTurnstileToken(null)}
+                      onError={() => {
+                        setTurnstileToken(null);
+                        setError("Error al cargar la verificación de seguridad. Por favor, recarga la página.");
+                      }}
+                    />
+                  </div>
+                  <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600 text-white font-semibold py-2.5 rounded-md" disabled={isLoading || !turnstileToken}>
                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin inline-flex" /> : null}
                     {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
                   </Button>
@@ -299,9 +316,9 @@ export default function LoginPage() {
                 <form onSubmit={handleTotpVerification} className="space-y-6">
                   {totpError && (
                     <Alert variant="destructive" className="dark:bg-red-900/30 dark:border-red-700 dark:text-red-300">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>Error de Verificación</AlertTitle>
-                        <AlertDescription>{totpError}</AlertDescription>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Error de Verificación</AlertTitle>
+                      <AlertDescription>{totpError}</AlertDescription>
                     </Alert>
                   )}
                   <div className="space-y-2">

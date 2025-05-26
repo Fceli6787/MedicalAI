@@ -56,7 +56,7 @@ interface DiagnosticoHistorial {
   resultado: string;
   nivel_confianza: number;
   fecha_diagnostico: string;
-  estado: string;
+  estado: string; /* Cambiado de estado_diagnostico a estado */
 }
 
 interface DiagnosticoDetalladoRecomendacion {
@@ -78,7 +78,7 @@ interface DiagnosticoDetallado {
   resultado: string;
   nivel_confianza: number;
   fecha_diagnostico: string;
-  estado_diagnostico: string;
+  estado_diagnostico: string; /* Mantener estado_diagnostico aquí para el mapeo de la API */
   ai_descripcion_detallada: string | null;
   ai_pronostico_tiempo_recuperacion: string | null;
   ai_pronostico_probabilidad_mejoria: string | null;
@@ -514,18 +514,18 @@ export default function HistorialPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <Table>
+                <Table style={{ tableLayout: 'fixed', width: '100%' }}>
                   <TableHeader className="bg-gray-100 dark:bg-gray-700/60">
                     <TableRow className="border-gray-200 dark:border-gray-600">
                       <TableHead className="w-[70px] px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("id_diagnostico")}>ID {getSortDirectionIcon("id_diagnostico")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nombre_paciente")}><User className="h-3.5 w-3.5" /> Paciente {getSortDirectionIcon("nombre_paciente")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nombre_medico")}><Stethoscope className="h-3.5 w-3.5" /> Médico {getSortDirectionIcon("nombre_medico")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("fecha_diagnostico")}><Calendar className="h-3.5 w-3.5" /> Fecha {getSortDirectionIcon("fecha_diagnostico")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nombre_tipo_examen")}><FileText className="h-3.5 w-3.5" /> Tipo Ex. {getSortDirectionIcon("nombre_tipo_examen")}</button></TableHead>
+                      <TableHead className="w-[150px] px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nombre_paciente")}><User className="h-3.5 w-3.5" /> Paciente {getSortDirectionIcon("nombre_paciente")}</button></TableHead>
+                      <TableHead className="w-[150px] px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nombre_medico")}><Stethoscope className="h-3.5 w-3.5" /> Médico {getSortDirectionIcon("nombre_medico")}</button></TableHead>
+                      <TableHead className="w-[120px] px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("fecha_diagnostico")}><Calendar className="h-3.5 w-3.5" /> Fecha {getSortDirectionIcon("fecha_diagnostico")}</button></TableHead>
+                      <TableHead className="w-[120px] px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nombre_tipo_examen")}><FileText className="h-3.5 w-3.5" /> Tipo Ex. {getSortDirectionIcon("nombre_tipo_examen")}</button></TableHead>
                       <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("resultado")}>Resultado {getSortDirectionIcon("resultado")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nivel_confianza")}>Confianza {getSortDirectionIcon("nivel_confianza")}</button></TableHead>
-                      <TableHead className="px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("estado")}>Estado {getSortDirectionIcon("estado")}</button></TableHead>
-                      <TableHead className="text-right px-4 py-2 text-xs font-medium text-gray-600 uppercase dark:text-gray-300">Acciones</TableHead>
+                      <TableHead className="w-[100px] px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("nivel_confianza")}>Confianza {getSortDirectionIcon("nivel_confianza")}</button></TableHead>
+                      <TableHead className="w-[100px] px-4 py-2"><button className="flex items-center gap-1 font-medium text-xs text-gray-600 uppercase hover:text-teal-700 dark:text-gray-300 dark:hover:text-teal-400" onClick={() => requestSort("estado")}>Estado {getSortDirectionIcon("estado")}</button></TableHead>
+                      <TableHead className="w-[80px] text-right px-4 py-2 text-xs font-medium text-gray-600 uppercase dark:text-gray-300">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

@@ -14,15 +14,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// Configurar persistencia con manejo de cookies
-(async () => {
-  try {
-    // Configurar persistencia LOCAL consistentemente
-    await setPersistence(auth, browserLocalPersistence);
-    console.log("[Firebase Config] Persistencia configurada a LOCAL");
-    
-    // Configurar cookies manualmente si es necesario
-    if (typeof window !== 'undefined') {
+// Configurar persistencia con manejo de cookies SOLO en el cliente
+if (typeof window !== 'undefined') {
+  (async () => {
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+      console.log("[Firebase Config] Persistencia configurada a LOCAL");
       auth.onAuthStateChanged(async (user) => {
         if (user) {
           document.cookie = `firebaseAuthToken=${await user.getIdToken()}; path=/; secure; samesite=lax`;
@@ -30,18 +27,17 @@ const auth = getAuth(app);
           document.cookie = 'firebaseAuthToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         }
       });
+    } catch (error) {
+      console.error("[Firebase Config] Error configurando persistencia local:", error);
+      try {
+        await setPersistence(auth, browserSessionPersistence);
+        console.log("[Firebase Config] Persistencia configurada a SESSION");
+      } catch (sessionError) {
+        console.error("[Firebase Config] Error configurando persistencia de sesión:", sessionError);
+        await setPersistence(auth, inMemoryPersistence);
+      }
     }
-  } catch (error) {
-    console.error("[Firebase Config] Error configurando persistencia local:", error);
-    try {
-      // Fallback a persistencia de sesión
-      await setPersistence(auth, browserSessionPersistence);
-      console.log("[Firebase Config] Persistencia configurada a SESSION");
-    } catch (sessionError) {
-      console.error("[Firebase Config] Error configurando persistencia de sesión:", sessionError);
-      await setPersistence(auth, inMemoryPersistence);
-    }
-  }
-})();
+  })();
+}
 
 export { app, auth };

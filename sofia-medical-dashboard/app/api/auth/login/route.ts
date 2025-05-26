@@ -1,8 +1,11 @@
 // app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, getUserMfaConfig, updateLastLoginInfo, getFullUserByFirebaseUID } from '../../../../lib/db'; // Añadir updateLastLoginInfo y getFullUserByFirebaseUID
+import { getUserMfaConfig, updateLastLoginInfo, getFullUserByFirebaseUID } from '../../../../lib/db';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { app } from '../../../../lib/firebase';
+import { EmailService } from '../../../../lib/services/emailService';
+import { transporter } from '../../../../lib/emailConfig';
+import { IEmailService } from '../../../../lib/services/interfaces/IEmailService'; // Importar la interfaz
 
 // Helper para normalizar IPs de loopback para comparación
 const normalizeIpForComparison = (ip: string | null | undefined): string | null => {
@@ -16,7 +19,50 @@ const normalizeIpForComparison = (ip: string | null | undefined): string | null 
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    const { email, password, turnstileToken } = await request.json();
+
+    // 1. Verificar el token de Cloudflare Turnstile
+    if (!turnstileToken) {
+      console.warn('[Login API] Turnstile token missing.');
+      return NextResponse.json(
+        { error: 'Verificación de seguridad requerida. Por favor, recarga la página.' },
+        { status: 400 }
+      );
+    }
+
+    const CLOUDFLARE_TURNSTILE_SECRET_KEY = process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
+
+    if (!CLOUDFLARE_TURNSTILE_SECRET_KEY) {
+      console.error('[Login API] CLOUDFLARE_TURNSTILE_SECRET_KEY is not set.');
+      return NextResponse.json(
+        { error: 'Error de configuración del servidor: clave secreta de Turnstile no encontrada.' },
+        { status: 500 }
+      );
+    }
+
+    const turnstileVerificationUrl = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+    const turnstileFormData = new FormData();
+    turnstileFormData.append('secret', CLOUDFLARE_TURNSTILE_SECRET_KEY);
+    turnstileFormData.append('response', turnstileToken);
+    turnstileFormData.append('remoteip', request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || ''); // Opcional: IP del usuario
+
+    console.log('[Login API] Sending Turnstile verification request...');
+    const turnstileResponse = await fetch(turnstileVerificationUrl, {
+      method: 'POST',
+      body: turnstileFormData,
+    });
+
+    const turnstileData = await turnstileResponse.json();
+    console.log('[Login API] Turnstile verification response:', turnstileData);
+
+    if (!turnstileData.success) {
+      console.warn('[Login API] Turnstile verification failed:', turnstileData['error-codes']);
+      return NextResponse.json(
+        { error: 'Verificación de seguridad fallida. Por favor, inténtalo de nuevo.' },
+        { status: 403 }
+      );
+    }
+    console.log('[Login API] Turnstile verification successful.');
 
     if (!email || !password) {
       return NextResponse.json(
@@ -51,31 +97,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- Detección de IP Anómala (Solo para médicos) ---
-    const currentIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'UNKNOWN_IP';
-    const normalizedCurrentIp = normalizeIpForComparison(currentIp);
-    
-    if (dbUser.roles && dbUser.roles.includes('medico')) {
-      const lastLoginIp = dbUser.ultima_ip_login;
-      const normalizedLastLoginIp = normalizeIpForComparison(lastLoginIp);
-      const lastLoginLocation = dbUser.ultima_ubicacion_login; // Si se implementa la geolocalización
-
-      if (normalizedLastLoginIp && normalizedLastLoginIp !== normalizedCurrentIp) {
-        console.warn(`[Login API] ALERTA DE SEGURIDAD (Médico): Inicio de sesión desde una IP diferente para usuario ${email}. IP anterior: ${lastLoginIp} (normalizada: ${normalizedLastLoginIp}), IP actual: ${currentIp} (normalizada: ${normalizedCurrentIp})`);
-        // Aquí se podría implementar un desafío adicional, como enviar un correo de alerta.
-        // Por ahora, solo se registra y se permite el login.
-      } else if (!lastLoginIp) {
-        console.log(`[Login API] Primer inicio de sesión o IP no registrada para médico ${email}. Registrando IP actual: ${currentIp}`);
-      }
-
-      // Actualizar la última IP y actividad del usuario (solo si es médico)
-      await updateLastLoginInfo(dbUser.id_usuario, currentIp, 'UNKNOWN_LOCATION'); // 'UNKNOWN_LOCATION' por ahora
-      console.log(`[Login API] Última IP de login (${currentIp}) y actividad actualizadas para médico ID: ${dbUser.id_usuario}`);
-    } else {
-      console.log(`[Login API] Usuario ${email} no es médico. Omitiendo actualización de IP de login.`);
-    }
-    // --- FIN Detección de IP Anómala ---
-
     // --- OBTENER ESTADO DE MFA ---
     let mfaEnabledForUser = false;
     if (dbUser.id_usuario) {
@@ -88,6 +109,38 @@ export async function POST(request: NextRequest) {
       console.warn(`[Login API] No id_usuario found for user ${email} to check MFA status.`);
     }
     // --- FIN OBTENER ESTADO DE MFA ---
+
+    // --- Detección de IP Anómala ---
+    const currentIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'UNKNOWN_IP';
+    const normalizedCurrentIp = normalizeIpForComparison(currentIp);
+
+    const lastLoginIp = dbUser.ultima_ip_login;
+    const normalizedLastLoginIp = normalizeIpForComparison(lastLoginIp);
+    const lastLoginLocation = dbUser.ultima_ubicacion_login; // Si se implementa la geolocalización
+
+    if (normalizedLastLoginIp && normalizedLastLoginIp !== normalizedCurrentIp) {
+      console.warn(`[Login API] ALERTA DE SEGURIDAD: Inicio de sesión desde una IP diferente para usuario ${email}. IP anterior: ${lastLoginIp} (normalizada: ${normalizedLastLoginIp}), IP actual: ${currentIp} (normalizada: ${normalizedCurrentIp})`);
+      
+      // Enviar correo de alerta si el usuario NO tiene MFA habilitado
+      if (!mfaEnabledForUser) {
+        const loginTime = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }); // Formato de hora local
+        const emailService = new EmailService(transporter, process.env.EMAIL_FROM || 'no-reply@example.com');
+        await emailService.sendLoginAlertEmail(
+          dbUser.correo,
+          dbUser.primer_nombre || dbUser.correo, // Usar primer nombre o correo si no hay nombre
+          currentIp,
+          lastLoginIp,
+          loginTime
+        );
+      }
+    } else if (!lastLoginIp) {
+      console.log(`[Login API] Primer inicio de sesión o IP no registrada para usuario ${email}. Registrando IP actual: ${currentIp}`);
+    }
+
+    // Actualizar la última IP y actividad del usuario para TODOS los usuarios
+    await updateLastLoginInfo(dbUser.id_usuario, currentIp, 'UNKNOWN_LOCATION'); // 'UNKNOWN_LOCATION' por ahora
+    console.log(`[Login API] Última IP de login (${currentIp}) y actividad actualizadas para usuario ID: ${dbUser.id_usuario}`);
+    // --- FIN Detección de IP Anómala ---
 
     const userDataForContext = {
       id_usuario: dbUser.id_usuario,
@@ -122,6 +175,18 @@ export async function POST(request: NextRequest) {
     console.log(`[Login API] - Firebase UID: ${userDataForContext.firebase_uid}`);
     console.log(`[Login API] - MFA Enabled: ${userDataForContext.mfa_enabled}`);
     console.log(`[Login API] - Current IP: ${userDataForContext.ultima_ip_login}`);
+
+    // Enviar notificación de inicio de sesión exitoso a médicos
+    if (dbUser.roles && dbUser.roles.includes('medico')) {
+      const loginTime = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+      const emailService = new EmailService(transporter, process.env.EMAIL_FROM || 'no-reply@example.com');
+      await emailService.sendSuccessfulLoginNotification(
+        dbUser.correo,
+        dbUser.primer_nombre || dbUser.correo,
+        currentIp,
+        loginTime
+      );
+    }
 
     return NextResponse.json({ user: userDataForContext }, { status: 200 });
 

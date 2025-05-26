@@ -37,7 +37,7 @@ export interface User {
 interface AuthContextProps {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<User | null>;
+  login: (email: string, password: string, turnstileToken?: string | null) => Promise<User | null>;
   register: (userData: any) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -205,7 +205,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     };
   }, [auth, fetchAndSetUser]);
 
-  const handleLogin = async (email: string, password: string): Promise<User | null> => {
+  const handleLogin = async (email: string, password: string, turnstileToken?: string | null): Promise<User | null> => {
     console.log("[AuthContext] Iniciando login para:", email);
     setLoading(true);
     try {
@@ -224,7 +224,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         body: JSON.stringify({
           email,
           password,
-          firebase_uid: firebaseUser.uid
+          firebase_uid: firebaseUser.uid,
+          turnstileToken, // Incluir el token de Turnstile
         }),
       });
       const result = await response.json();

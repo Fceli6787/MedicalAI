@@ -74,9 +74,9 @@ export default function DashboardLayout({
   // Si todo está bien, renderizar el dashboard
   console.log("[DashboardLayout Render] Usuario autenticado. Renderizando contenido del dashboard para:", user.correo);
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="grid h-screen bg-background" style={{ gridTemplateColumns: '256px 1fr' }}> {/* 256px para la sidebar (w-64), 1fr para el contenido */}
       <SidebarNav />
-      <main className="flex-1 overflow-x-hidden overflow-y-auto w-full">
+      <main className="overflow-x-hidden overflow-y-auto"> {/* Eliminar w-full ya que grid lo maneja */}
         {children}
       </main>
     </div>

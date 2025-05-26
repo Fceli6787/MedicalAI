@@ -52,18 +52,19 @@ const QrCodeComponent = ({ data }: { data: string | null }) => {
         height: 256,
         data: data,
         image: '/Logo_sofia.png', 
-        dotsOptions: { color: theme === 'dark' ? '#14b8a6' : '#0d9488', type: 'rounded' }, // Teal-500 for dark, Teal-600 for light
-        backgroundOptions: { color: theme === 'dark' ? '#374151' : '#ffffff' }, // Gray-700 for dark, White for light
+        dotsOptions: { color: '#000000', type: 'rounded' }, // Siempre negro para los puntos
+        backgroundOptions: { color: '#FFFFFF' }, // Siempre blanco para el fondo del QR
         imageOptions: { crossOrigin: 'anonymous', margin: 5, imageSize: 0.3 },
-        cornersSquareOptions: { color: theme === 'dark' ? '#0f766e' : '#0f766e', type: 'extra-rounded' }, // Teal-700
-        cornersDotOptions: { color: theme === 'dark' ? '#134e4a' : '#115e59', type: 'dot' } // Teal-900 for dark, Teal-800 for light
+        cornersSquareOptions: { color: '#000000', type: 'extra-rounded' }, // Siempre negro para las esquinas
+        cornersDotOptions: { color: '#000000', type: 'dot' } // Siempre negro para los puntos de las esquinas
       });
       qrCode.append(qrRef.current);
     }
-  }, [data, theme]); // Re-render QR on theme change
+  }, [data]); // Ya no depende del tema, solo de los datos
 
   if (!data) return null;
-  // Adjusted background for the QR container itself for better contrast in dark mode
+  // El contenedor del QR ya tiene un fondo blanco/gris claro en modo oscuro, lo cual es bueno.
+  // Aseguramos que el QR interno sea siempre blanco y negro.
   return <div ref={qrRef} className="mx-auto my-4 p-4 bg-white dark:bg-gray-200 inline-block rounded-lg shadow-md"></div>;
 };
 

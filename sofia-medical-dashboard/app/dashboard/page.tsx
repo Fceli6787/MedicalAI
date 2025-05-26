@@ -1,45 +1,42 @@
 "use client"
 
-import { useState, useEffect, useContext, useMemo } from "react" 
+import { useState, useEffect, useContext, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
-import { Activity, Users, Clock, BarChart3, TrendingUp, AlertTriangle, Loader2, PieChartIcon, LineChartIcon } from "lucide-react" 
+import { Activity, Users, Clock, BarChart3, TrendingUp, AlertTriangle, Loader2, PieChartIcon } from "lucide-react"
 import { AuthContext } from "../../context/AuthContext"
-import { 
-    ChartContainer, 
-    ChartTooltip, 
+import {
+    ChartContainer,
+    ChartTooltip,
     ChartTooltipContent,
     ChartLegend,
     ChartLegendContent
-} from "@/components/ui/chart" 
-import { 
-    Bar, 
-    BarChart, 
-    Line,
-    LineChart,
-    Pie, 
-    PieChart as RechartsPieChart, 
-    ResponsiveContainer, 
-    XAxis, 
+} from "@/components/ui/chart"
+import {
+    Bar,
+    BarChart,
+    Pie,
+    PieChart as RechartsPieChart,
+    ResponsiveContainer,
+    XAxis,
     YAxis,
     CartesianGrid,
     Cell
-} from "recharts" 
+} from "recharts"
 import dayjs from 'dayjs';
 import 'dayjs/locale/es';
 dayjs.locale('es');
-
 
 // Interfaz para los datos de diagnóstico
 interface Diagnostico {
   id_diagnostico: number;
   nombre_paciente: string | null;
   nombre_medico: string | null;
-  nombre_tipo_examen: string | null; 
-  resultado: string | null; 
+  nombre_tipo_examen: string | null;
+  resultado: string | null;
   nivel_confianza: number | null;
-  fecha_diagnostico: string; 
-  estado: string | null; 
+  fecha_diagnostico: string;
+  estado: string | null;
 }
 
 // Interfaz para los datos de paciente
@@ -47,21 +44,17 @@ interface Paciente {
   id_usuario: number;
   primer_nombre?: string;
   primer_apellido?: string;
-  fecha_registro_usuario?: string; 
-}
-
-// Interfaz para los datos de usuario (general)
-interface AppUser {
-  id_usuario: number;
-  primer_nombre?: string;
+  fecha_registro_usuario?: string;
+  genero?: string; // Añadido el campo genero
 }
 
 // Tipos para los datos de los gráficos
 type DiagnosticosPorTipoData = { name: string; total: number; fill: string }[];
 type DiagnosticosPorEstadoData = { name: string; value: number; fill: string }[];
-type PacientesNuevosPorMesData = { month: string; total: number }[];
+type DiagnosticosPorResultadoData = { name: string; value: number; fill: string }[];
+type PacientesPorGeneroData = { name: string; value: number; fill: string }[]; // Nuevo tipo para el gráfico de género
 
-// --- Paleta de Colores Actualizada ---
+// Paleta de Colores Actualizada
 const CHART_COLORS = {
   TIPO_EXAMEN: [
     "hsl(170, 70%, 45%)", // Teal
@@ -69,14 +62,27 @@ const CHART_COLORS = {
     "hsl(340, 80%, 60%)", // Magenta/Rosa
     "hsl(40, 90%, 60%)",  // Naranja
     "hsl(260, 70%, 65%)", // Púrpura
+    "hsl(120, 60%, 40%)", // Verde oscuro
+    "hsl(30, 70%, 50%)",  // Marrón claro
   ],
   ESTADO: {
     Completado: "hsl(140, 60%, 45%)", // Verde
     Pendiente: "hsl(45, 90%, 55%)",  // Amarillo/Naranja
-    Anulado: "hsl(0, 70%, 55%)",    // Rojo
-    Default: "hsl(220, 10%, 60%)"   // Gris para Desconocido/Default
+    Anulado: "hsl(0, 70%, 55%)",     // Rojo
+    Default: "hsl(220, 10%, 60%)"    // Gris para Desconocido/Default
   },
-  LINE_CHART: "hsl(195, 75%, 50%)", // Azul vibrante para la línea
+  RESULTADO_DIAGNOSTICO: [
+    "hsl(220, 75%, 60%)", // Azul oscuro
+    "hsl(150, 65%, 50%)", // Verde mar
+    "hsl(30, 85%, 55%)",  // Naranja oscuro
+    "hsl(300, 70%, 60%)", // Púrpura brillante
+    "hsl(60, 80%, 50%)",  // Amarillo vivo
+    "hsl(0, 75%, 65%)",   // Rojo coral
+    "hsl(180, 60%, 40%)", // Cian oscuro
+    "hsl(270, 70%, 70%)", // Lavanda
+    "hsl(90, 55%, 50%)",  // Verde lima
+    "hsl(330, 70%, 65%)", // Rosa fuerte
+  ],
 };
 
 export default function DashboardPage() {
@@ -84,39 +90,33 @@ export default function DashboardPage() {
   if (!context) {
     throw new Error("useAuth debe usarse dentro de un AuthProvider")
   }
-  const { user } = context 
+  const { user } = context
 
   const [diagnosticos, setDiagnosticos] = useState<Diagnostico[]>([])
   const [pacientes, setPacientes] = useState<Paciente[]>([])
-  const [usuarios, setUsuarios] = useState<AppUser[]>([]) 
-  const [loading, setLoading] = useState(true); 
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const cargarDatos = async () => {
       setLoading(true);
-      setError(null); 
+      setError(null);
       try {
-        const [usuariosResponse, pacientesResponse, diagnosticosResponse] = await Promise.all([
-          fetch("/api/dashboard/users"),
+        const [pacientesResponse, diagnosticosResponse] = await Promise.all([
           fetch("/api/dashboard/pacientes"),
-          fetch("/api/dashboard/diagnosticos"), 
+          fetch("/api/dashboard/diagnosticos"),
         ]);
-
-        if (!usuariosResponse.ok) throw new Error(`Error al cargar usuarios: ${usuariosResponse.statusText} (${usuariosResponse.status})`);
-        const usuariosData = await usuariosResponse.json();
-        setUsuarios(Array.isArray(usuariosData) ? usuariosData : usuariosData.users || []);
 
         if (!pacientesResponse.ok) throw new Error(`Error al cargar pacientes: ${pacientesResponse.statusText} (${pacientesResponse.status})`);
         const pacientesData = await pacientesResponse.json();
         setPacientes((pacientesData.pacientes || []).map((p: any) => ({
             ...p,
-            fecha_registro_usuario: p.fecha_registro_usuario || p.fecha_registro 
+            fecha_registro_usuario: p.fecha_registro_usuario || p.fecha_registro
         })));
 
         if (!diagnosticosResponse.ok) throw new Error(`Error al cargar diagnósticos: ${diagnosticosResponse.statusText} (${diagnosticosResponse.status})`);
         const diagnosticosData = await diagnosticosResponse.json();
-        setDiagnosticos(Array.isArray(diagnosticosData) ? diagnosticosData : []); 
+        setDiagnosticos(Array.isArray(diagnosticosData) ? diagnosticosData : []);
 
       } catch (error: any) {
         console.error("Error cargando datos del dashboard:", error);
@@ -126,15 +126,14 @@ export default function DashboardPage() {
       }
     }
 
-    if (user) { 
+    if (user) {
         cargarDatos();
-    } else { 
+    } else {
         setLoading(false);
     }
   }, [user]);
 
-  // --- Procesamiento de datos para gráficos (usando useMemo para optimización) ---
-
+  // Procesamiento de datos para gráficos
   const diagnosticosPorTipo: DiagnosticosPorTipoData = useMemo(() => {
     if (loading || !diagnosticos.length) return [];
     const counts: { [key: string]: number } = {};
@@ -146,7 +145,7 @@ export default function DashboardPage() {
       name,
       total,
       fill: CHART_COLORS.TIPO_EXAMEN[index % CHART_COLORS.TIPO_EXAMEN.length],
-    }));
+    })).sort((a, b) => b.total - a.total);
   }, [diagnosticos, loading]);
 
   const diagnosticosPorEstado: DiagnosticosPorEstadoData = useMemo(() => {
@@ -163,42 +162,53 @@ export default function DashboardPage() {
     }));
   }, [diagnosticos, loading]);
 
-  const pacientesNuevosPorMes: PacientesNuevosPorMesData = useMemo(() => {
+  // Nuevo procesamiento de datos para pacientes por género
+  const pacientesPorGenero: PacientesPorGeneroData = useMemo(() => {
     if (loading || !pacientes.length) return [];
     const counts: { [key: string]: number } = {};
-    const twelveMonthsAgo = dayjs().subtract(11, 'month').startOf('month'); 
-
-    pacientes.forEach(pac => {
-      if (pac.fecha_registro_usuario) {
-        const fechaRegistro = dayjs(pac.fecha_registro_usuario);
-        if (fechaRegistro.isValid() && fechaRegistro.isAfter(twelveMonthsAgo.subtract(1, 'day')) && fechaRegistro.isBefore(dayjs().add(1,'month').startOf('month'))) { 
-          const monthYear = fechaRegistro.format('MMM YY'); // Formato más corto para el eje X
-          counts[monthYear] = (counts[monthYear] || 0) + 1;
+    pacientes.forEach(paciente => {
+      let generoNormalizado = "Desconocido";
+      if (paciente.genero) {
+        const generoLower = paciente.genero.toLowerCase();
+        if (generoLower === "masculino" || generoLower === "m") {
+          generoNormalizado = "Masculino";
+        } else if (generoLower === "femenino" || generoLower === "f") {
+          generoNormalizado = "Femenino";
+        } else {
+          generoNormalizado = "Otro";
         }
       }
+      counts[generoNormalizado] = (counts[generoNormalizado] || 0) + 1;
     });
-    
-    const resultData = [];
-    for (let i = 0; i < 12; i++) {
-        const month = twelveMonthsAgo.add(i, 'month').format('MMM YY'); // Formato más corto
-        resultData.push({
-            month,
-            total: counts[month] || 0,
-        });
-    }
-    return resultData;
+    // Asignar colores de forma consistente
+    const genderColors: { [key: string]: string } = {
+      Masculino: "hsl(200, 80%, 55%)", // Azul
+      Femenino: "hsl(340, 80%, 60%)",  // Magenta/Rosa
+      Otro: "hsl(40, 90%, 60%)",       // Naranja (un color diferente para 'Otro')
+      Desconocido: "hsl(220, 10%, 60%)" // Gris
+    };
+    return Object.entries(counts).map(([name, value]) => ({
+      name,
+      value,
+      fill: genderColors[name] || genderColors.Desconocido,
+    }));
   }, [pacientes, loading]);
 
-  // Determinar el valor máximo para el eje Y del gráfico de líneas
-  const maxYValuePacientesNuevos = useMemo(() => {
-    if (!pacientesNuevosPorMes.length) return 5; 
-    const maxTotal = Math.max(...pacientesNuevosPorMes.map(d => d.total), 0);
-    if (maxTotal <= 1) return 2; 
-    return Math.max(5, Math.ceil(maxTotal * 1.2)); 
-  }, [pacientesNuevosPorMes]);
+  const diagnosticosPorResultado: DiagnosticosPorResultadoData = useMemo(() => {
+    if (loading || !diagnosticos.length) return [];
+    const counts: { [key: string]: number } = {};
+    diagnosticos.forEach(diag => {
+      const resultado = diag.resultado || "No especificado";
+      counts[resultado] = (counts[resultado] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value], index) => ({
+      name,
+      value,
+      fill: CHART_COLORS.RESULTADO_DIAGNOSTICO[index % CHART_COLORS.RESULTADO_DIAGNOSTICO.length],
+    })).sort((a,b) => b.value - a.value);
+  }, [diagnosticos, loading]);
 
-
-  if (!user && !loading) { 
+  if (!user && !loading) {
     return (
       <div className="flex items-center justify-center h-screen p-6 text-center">
         <div>
@@ -209,7 +219,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (error && !loading) { 
+  if (error && !loading) {
     return (
       <div className="flex items-center justify-center h-screen p-6 text-center">
         <div>
@@ -219,26 +229,21 @@ export default function DashboardPage() {
       </div>
     );
   }
-  
-  const isLoadingMetrics = loading && (!diagnosticos.length || !pacientes.length);
 
+  const isLoadingMetrics = loading && (!diagnosticos.length || !pacientes.length);
 
   const precisionPromedio = useMemo(() => {
     if (!diagnosticos.length) return 0;
-    
     const confianzas = diagnosticos
       .map(d => {
         const valor = d.nivel_confianza;
         if (valor === null) return null;
-        // Asegurar que el valor esté entre 0 y 1
         return Math.min(Math.max(valor, 0), 1);
       })
       .filter((n): n is number => n !== null);
-      
     if (!confianzas.length) return 0;
-    
     const promedio = confianzas.reduce((a, b) => a + b, 0) / confianzas.length;
-    const porcentaje = Math.min(promedio * 100, 100); // Limitar máximo a 100%
+    const porcentaje = Math.min(promedio * 100, 100);
     return Number(porcentaje.toFixed(2));
   }, [diagnosticos]);
 
@@ -302,7 +307,7 @@ export default function DashboardPage() {
                       <Loader2 className="h-6 w-6 animate-spin mr-2" /> Cargando diagnósticos...
                   </div>
                 ) : diagnosticosRecientes.length > 0 ? (
-                  diagnosticosRecientes.map((diag) => ( 
+                  diagnosticosRecientes.map((diag) => (
                     <div key={diag.id_diagnostico} className="flex items-center gap-4 p-3 sm:p-4 border-b last:border-b-0 hover:bg-gray-50/50 transition-colors dark:border-gray-700 dark:hover:bg-gray-700/50">
                       <div className="h-10 w-10 rounded-md bg-teal-100 dark:bg-teal-800 flex items-center justify-center flex-shrink-0">
                         <TrendingUp className="h-5 w-5 text-teal-600 dark:text-teal-400" />
@@ -320,7 +325,7 @@ export default function DashboardPage() {
                             {diag.nivel_confianza !== null ? `${(diag.nivel_confianza * 100).toFixed(0)}%` : "N/A"}
                         </div>
                         <div className="text-xs text-gray-400 dark:text-gray-500">
-                            {dayjs(diag.fecha_diagnostico).format('DD MMM YY')} 
+                            {dayjs(diag.fecha_diagnostico).format('DD MMM YY')}
                         </div>
                       </div>
                     </div>
@@ -338,18 +343,18 @@ export default function DashboardPage() {
         <TabsContent value="estadisticas" className="space-y-6">
             {loading ? (
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card><CardHeader><CardTitle>Diagnósticos por Tipo</CardTitle></CardHeader><CardContent className="h-[300px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></CardContent></Card>
-                    <Card><CardHeader><CardTitle>Diagnósticos por Estado</CardTitle></CardHeader><CardContent className="h-[300px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></CardContent></Card>
-                    <Card className="md:col-span-2"><CardHeader><CardTitle>Pacientes Nuevos por Mes</CardTitle></CardHeader><CardContent className="h-[300px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></CardContent></Card>
+                   <Card><CardHeader><CardTitle>Diagnósticos por Tipo</CardTitle></CardHeader><CardContent className="h-[350px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></CardContent></Card>
+                   <Card><CardHeader><CardTitle>Pacientes por Género</CardTitle></CardHeader><CardContent className="h-[300px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></CardContent></Card>
+                   <Card className="md:col-span-2"><CardHeader><CardTitle>Resultados de Diagnósticos</CardTitle></CardHeader><CardContent className="h-[300px] flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></CardContent></Card>
                  </div>
             ) : error ? (
-                <Card className="border-red-200 bg-red-50">
-                    <CardHeader><CardTitle className="text-red-700">Error al cargar estadísticas</CardTitle></CardHeader>
-                    <CardContent><p className="text-red-600">{error}</p></CardContent>
-                </Card>
+                 <Card className="border-red-200 bg-red-50">
+                     <CardHeader><CardTitle className="text-red-700">Error al cargar estadísticas</CardTitle></CardHeader>
+                     <CardContent><p className="text-red-600">{error}</p></CardContent>
+                 </Card>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Gráfico 1: Diagnósticos por Tipo de Examen */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Gráfico 1: Diagnósticos por Tipo de Examen (Barras Verticales) */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
@@ -360,14 +365,25 @@ export default function DashboardPage() {
                         </CardHeader>
                         <CardContent>
                             {diagnosticosPorTipo.length > 0 ? (
-                                <ChartContainer config={{}} className="h-[250px] w-full">
+                                <ChartContainer config={{}} className="h-[350px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={diagnosticosPorTipo} layout="vertical" margin={{ right: 20, left: 30, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                            <XAxis type="number" />
-                                            <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} interval={0} />
-                                            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                                            <Bar dataKey="total" radius={5}>
+                                        <BarChart data={diagnosticosPorTipo} margin={{ top: 5, right: 20, left: 5, bottom: 100 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                            <XAxis
+                                                dataKey="name"
+                                                type="category"
+                                                interval={0}
+                                                angle={-60}
+                                                textAnchor="end"
+                                                tick={{ fontSize: 10 }}
+                                                height={90}
+                                            />
+                                            <YAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                                            <ChartTooltip
+                                                cursor={{ fill: 'hsl(var(--muted) / 0.3)'}}
+                                                content={<ChartTooltipContent hideLabel />}
+                                            />
+                                            <Bar dataKey="total" radius={[4, 4, 0, 0]}>
                                                 {diagnosticosPorTipo.map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={entry.fill} />
                                                 ))}
@@ -379,23 +395,25 @@ export default function DashboardPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Gráfico 2: Diagnósticos por Estado */}
+                    {/* Gráfico 2: Pacientes por Género (PieChart) */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
                                 <PieChartIcon className="h-5 w-5 text-teal-600" />
-                                Diagnósticos por Estado
+                                Pacientes por Género
                             </CardTitle>
-                            <CardDescription>Distribución de diagnósticos según su estado actual.</CardDescription>
+                            <CardDescription>Distribución de pacientes según su género.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {diagnosticosPorEstado.length > 0 ? (
-                                <ChartContainer config={{}} className="h-[250px] w-full">
+                            {pacientesPorGenero.length > 0 ? (
+                                <ChartContainer config={{}} className="h-[300px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <RechartsPieChart>
                                             <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
-                                            <Pie data={diagnosticosPorEstado} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} labelLine={false} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                                                {diagnosticosPorEstado.map((entry, index) => (
+                                            <Pie data={pacientesPorGenero} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} labelLine={false} label={({ name, percent, value }) => `${name} (${value}) ${(percent * 100).toFixed(0)}%`}
+                                                style={{ fontSize: '10px' }}
+                                            >
+                                                {pacientesPorGenero.map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={entry.fill} />
                                                 ))}
                                             </Pie>
@@ -407,51 +425,36 @@ export default function DashboardPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Gráfico 3: Pacientes Nuevos por Mes */}
+                    {/* Gráfico 3: Resultados de Diagnósticos (PieChart) */}
                     <Card className="md:col-span-2">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <LineChartIcon className="h-5 w-5 text-teal-600" />
-                                Pacientes Nuevos por Mes (Últimos 12 Meses)
+                                <PieChartIcon className="h-5 w-5 text-teal-600" />
+                                Resultados de Diagnósticos
                             </CardTitle>
-                            <CardDescription>Tendencia de registros de nuevos pacientes.</CardDescription>
+                            <CardDescription>Distribución de los diferentes resultados de diagnósticos emitidos.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {pacientesNuevosPorMes.length > 0 ? (
-                                <ChartContainer config={{}} className="h-[250px] w-full">
+                            {diagnosticosPorResultado.length > 0 ? (
+                                <ChartContainer config={{}} className="h-[300px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={pacientesNuevosPorMes} margin={{ top: 5, right: 30, left: 0, bottom: 25 }}> 
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis 
-                                                dataKey="month" 
-                                                tick={{ fontSize: 10 }} 
-                                                interval={0} 
-                                                angle={-45} 
-                                                textAnchor="end" 
-                                                height={60} 
-                                            />
-                                            <YAxis allowDecimals={false} domain={[0, maxYValuePacientesNuevos]} />
-                                            <ChartTooltip 
-                                                cursor={{ strokeDasharray: '3 3' }}
-                                                content={<ChartTooltipContent indicator="line" />} 
-                                            />
-                                            <Line 
-                                                type="monotone" 
-                                                dataKey="total" 
-                                                stroke={CHART_COLORS.LINE_CHART} 
-                                                strokeWidth={3} 
-                                                dot={{ r: 5, strokeWidth: 2, fill: CHART_COLORS.LINE_CHART }} 
-                                                activeDot={{ r: 7, strokeWidth: 2, fill: CHART_COLORS.LINE_CHART }} 
-                                                connectNulls={true} 
-                                                name="Nuevos Pacientes"
-                                            />
-                                        </LineChart>
+                                        <RechartsPieChart>
+                                            <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
+                                            <Pie data={diagnosticosPorResultado} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} labelLine={false} label={({ name, percent, value }) => `${(percent * 100).toFixed(0)}%`}
+                                                style={{ fontSize: '10px' }}
+                                            >
+                                                {diagnosticosPorResultado.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                ))}
+                                            </Pie>
+                                            <ChartLegend content={<ChartLegendContent nameKey="name" />} />
+                                        </RechartsPieChart>
                                     </ResponsiveContainer>
                                 </ChartContainer>
                             ) : <p className="text-sm text-gray-500 text-center py-10">No hay datos suficientes para este gráfico.</p>}
                         </CardContent>
                     </Card>
-                </div>
+                 </div>
             )}
         </TabsContent>
       </Tabs>
