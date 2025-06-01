@@ -1,14 +1,10 @@
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
-// Interfaz actualizada para reflejar los datos que realmente se pasan
-// y la estructura plana del diagnóstico.
 export interface DiagnosisReportData {
   patientInfo: {
     id: string; // ID del paciente
     name: string; // Nombre completo
     nui: string; // NUI/Documento
-    // age y gender eliminados
     examDate: string; // Fecha del examen
     clinicalHistory?: string; // Historia clínica (opcional)
   };
@@ -23,11 +19,11 @@ export interface DiagnosisReportData {
     };
   };
   imageFileName?: string; // Nombre del archivo de imagen (opcional)
+  imageBuffer?: Buffer; // Buffer de la imagen para incluir directamente
   examType?: string; // Tipo de examen (opcional)
-  // imageUrl?: string; // No se usa si capturamos con html2canvas
 }
 
-export const generateDiagnosisPDF = async (reportData: DiagnosisReportData, elementToCapture?: HTMLElement) => {
+export const generateDiagnosisPDF = async (reportData: DiagnosisReportData) => {
   const pdf = new jsPDF({
       orientation: 'p', // portrait
       unit: 'pt', // points
@@ -187,46 +183,44 @@ export const generateDiagnosisPDF = async (reportData: DiagnosisReportData, elem
   currentY += 10; // Espacio antes de la imagen
 
   // --- Imagen del diagnóstico ---
-  const checkAndAddImage = async (currentYPos: number): Promise<number> => {
-    let finalY = currentYPos;
-    if (elementToCapture) {
-      try {
-        console.log("Capturando elemento para PDF...");
-        const canvas = await html2canvas(elementToCapture, { scale: 2 }); // Aumentar escala para mejor resolución
-        const imgData = canvas.toDataURL('image/png');
-        console.log("Canvas capturado, añadiendo imagen al PDF...");
-        
-        const imgProps = pdf.getImageProperties(imgData);
-        const imgWidth = contentWidth * 0.6; // Ancho de imagen (60% del contenido)
-        const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-        const imgX = margin + (contentWidth - imgWidth) / 2; // Centrar imagen
+  if (reportData.imageBuffer) {
+    try {
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(12);
+      pdf.setTextColor(blackColorRgb[0], blackColorRgb[1], blackColorRgb[2]);
+      pdf.text("Imagen Diagnóstica:", margin, currentY);
+      currentY += 15;
 
-        // Verificar si la imagen cabe en la página actual
-        if (finalY + imgHeight > pageHeight - margin - 20) { // Margen inferior + espacio para pie
-          pdf.addPage();
-          finalY = margin; // Reiniciar Y en la nueva página
-          pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(12);
-          pdf.setTextColor(blackColorRgb[0], blackColorRgb[1], blackColorRgb[2]);
-          pdf.text("Imagen Diagnóstica:", margin, finalY);
-          finalY += 15;
-        }
-        
-        pdf.addImage(imgData, 'PNG', imgX, finalY, imgWidth, imgHeight);
-        finalY += imgHeight + 15; // Actualizar Y después de la imagen
+      const imgData = reportData.imageBuffer;
+      const imgProps = pdf.getImageProperties(imgData);
+      const imgWidth = contentWidth * 0.6; // Ancho de imagen (60% del contenido)
+      const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+      const imgX = margin + (contentWidth - imgWidth) / 2; // Centrar imagen
 
-      } catch (error) {
-        console.error('Error al capturar o añadir la imagen al PDF:', error);
-        pdf.setFont("helvetica", "italic");
-        pdf.setTextColor(255, 0, 0); // Rojo para error
-        pdf.text("Error al cargar la imagen.", margin, finalY);
-        finalY += 15;
+      // Verificar si la imagen cabe en la página actual
+      if (currentY + imgHeight > pageHeight - margin - 20) { // Margen inferior + espacio para pie
+        pdf.addPage();
+        currentY = margin; // Reiniciar Y en la nueva página
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(12);
+        pdf.setTextColor(blackColorRgb[0], blackColorRgb[1], blackColorRgb[2]);
+        pdf.text("Imagen Diagnóstica:", margin, currentY);
+        currentY += 15;
       }
-    }
-    return finalY;
-  };
+      
+      // Determinar el formato de la imagen. Asumimos JPEG o PNG.
+      // jsPDF puede inferir el tipo si el buffer es correcto.
+      pdf.addImage(imgData, 'JPEG', imgX, currentY, imgWidth, imgHeight); // Asumimos JPEG, se puede mejorar la detección
+      currentY += imgHeight + 15; // Actualizar Y después de la imagen
 
-  currentY = await checkAndAddImage(currentY);
+    } catch (error) {
+      console.error('Error al añadir la imagen al PDF:', error);
+      pdf.setFont("helvetica", "italic");
+      pdf.setTextColor(255, 0, 0); // Rojo para error
+      pdf.text("Error al cargar la imagen.", margin, currentY);
+      currentY += 15;
+    }
+  }
 
 
   // --- Pie de página ---

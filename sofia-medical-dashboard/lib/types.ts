@@ -52,7 +52,7 @@ export interface PacienteDetails {
   paisCodigo?: string;
   nui?: string;
   estado?: string;
-  fecha_nacimiento?: string | null;
+  fecha_nacimiento?: Date | string | null;
   genero?: string | null;
   telefono_contacto?: string | null;
   direccion_residencial?: string | null;
@@ -70,4 +70,28 @@ export interface SearchedPatient {
   primer_nombre: string;
   primer_apellido: string;
   nui: string;
+}
+
+// Nueva interfaz User global
+export interface User {
+  id_usuario: number;
+  id_tipo_documento: number;
+  id_pais: number;
+  nui: string;
+  primer_nombre: string;
+  segundo_nombre: string | null;
+  primer_apellido: string;
+  segundo_apellido: string | null;
+  correo: string;
+  fecha_registro: string;
+  ultima_actividad: string | null;
+  estado: string;
+  firebase_uid: string;
+  rol?: string; // Hacemos 'rol' opcional aquí para compatibilidad
+  roles: string[];
+  mfa_enabled?: boolean;
+  // Campos para médicos
+  id_especialidad?: number;
+  numero_tarjeta_profesional?: string;
+  años_experiencia?: number;
 }

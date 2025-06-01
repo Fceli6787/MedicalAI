@@ -13,4 +13,11 @@ export interface IEmailService {
     loginIp: string,
     loginTime: string
   ): Promise<void>;
+  
+  sendDiagnosisReportEmail(
+    recipientEmail: string,
+    patientName: string,
+    pdfBuffer: Buffer,
+    fileName: string
+  ): Promise<void>;
 }

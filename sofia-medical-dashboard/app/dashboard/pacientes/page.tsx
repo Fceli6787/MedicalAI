@@ -36,6 +36,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import Swal from 'sweetalert2';
+import { BulkUploadDialog } from "@/components/bulk-upload-dialog"; // Importar el nuevo componente
 
 import dayjs from 'dayjs';
 import 'dayjs/locale/es';
@@ -388,6 +389,7 @@ export default function PacientesPage() {
   const [editingPatient, setEditingPatient] = useState<Paciente | null>(null)
   const [editingPatientFormData, setEditingPatientFormData] = useState<PatientFormData>({...initialPatientFormState})
   const [isLoadingEditData, setIsLoadingEditData] = useState(false)
+  const [isSavingAddData, setIsSavingAddData] = useState(false)
   const [isSavingEditData, setIsSavingEditData] = useState(false)
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -475,7 +477,7 @@ export default function PacientesPage() {
         !newPatient.tipoDocumentoCodigo || 
         !newPatient.paisCodigo || 
         !newPatient.email?.trim() || 
-        !newPatient.nui?.trim()) {
+                !newPatient.nui?.trim()) {
         toast({ title: "Campos Requeridos", description: "Por favor, complete todos los campos obligatorios (nombre, apellido, tipo documento, país, email, NUI).", variant: "destructive" });
         return;
     }
@@ -486,7 +488,7 @@ export default function PacientesPage() {
       roles: ['paciente']
     };
     try {
-      setIsSavingEditData(true);
+      setIsSavingAddData(true);
       const response = await fetch("/api/pacientes/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -676,7 +678,7 @@ export default function PacientesPage() {
                 onClick={handleAddPatientSubmit}
                 className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600"
                 disabled={
-                  isSavingEditData ||
+                  isSavingAddData ||
                   !newPatient.primer_nombre?.trim() ||
                   !newPatient.primer_apellido?.trim() ||
                   !newPatient.tipoDocumentoCodigo ||
@@ -685,7 +687,7 @@ export default function PacientesPage() {
                   !newPatient.nui?.trim()
                 }
               >
-                {isSavingEditData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Guardar Paciente
+                {isSavingAddData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Guardar Paciente
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -714,9 +716,9 @@ export default function PacientesPage() {
           )}
           <DialogFooter className="dark:border-t dark:border-gray-700 pt-4">
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Cancelar</Button>
-            <Button onClick={handleEditPatientSubmit} className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600" disabled={isLoadingEditData || isSavingEditData || !editingPatientFormData.primer_nombre || !editingPatientFormData.primer_apellido || !editingPatientFormData.tipoDocumentoCodigo || !editingPatientFormData.paisCodigo || !editingPatientFormData.email || !editingPatientFormData.nui}>
-                {isSavingEditData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Guardar Cambios
-            </Button>
+              <Button onClick={handleEditPatientSubmit} className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600" disabled={isLoadingEditData || isSavingEditData || !editingPatientFormData.primer_nombre || !editingPatientFormData.primer_apellido || !editingPatientFormData.tipoDocumentoCodigo || !editingPatientFormData.paisCodigo || !editingPatientFormData.email || !editingPatientFormData.nui}>
+                  {isSavingEditData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Guardar Cambios
+              </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

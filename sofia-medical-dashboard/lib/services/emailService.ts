@@ -1,36 +1,13 @@
 import nodemailer from 'nodemailer';
 import { IEmailService } from './interfaces/IEmailService';
-
-// Configuración del transportador de correo
-// Se recomienda usar un servicio de envío de correos como SendGrid, Mailgun, etc.
-// Las credenciales deben estar en las variables de entorno.
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: parseInt(process.env.EMAIL_PORT || '587'),
-  secure: process.env.EMAIL_SECURE === 'true', // true for 465, false for other ports
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: {
-    // No rechazar certificados auto-firmados. Útil para desarrollo, pero no recomendado en producción.
-    // rejectUnauthorized: false, 
-  },
-});
-
-console.log('[Email Service] Nodemailer Transporter Configured:');
-console.log(`- Host: ${process.env.EMAIL_HOST}`);
-console.log(`- Port: ${process.env.EMAIL_PORT}`);
-console.log(`- Secure: ${process.env.EMAIL_SECURE}`);
-console.log(`- User: ${process.env.EMAIL_USER ? '*****' : 'NOT SET'}`); // Ocultar la contraseña
-console.log(`- From: ${process.env.EMAIL_FROM}`);
+import { transporter } from '../emailConfig'; // Importar el transporter centralizado
 
 export class EmailService implements IEmailService {
   private transporter: nodemailer.Transporter;
   private fromEmail: string;
 
-  constructor(transporterInstance: nodemailer.Transporter, fromEmail: string) {
-    this.transporter = transporterInstance;
+  constructor(fromEmail: string) {
+    this.transporter = transporter; // Usar el transporter importado
     this.fromEmail = fromEmail;
   }
 
@@ -318,6 +295,60 @@ export class EmailService implements IEmailService {
       console.log(`[Email Service] Preview URL (if using Ethereal): ${nodemailer.getTestMessageUrl(info)}`);
     } catch (error) {
       console.error(`[Email Service] Error al enviar notificación de inicio de sesión exitoso a ${recipientEmail}:`, error);
+      if (error instanceof Error) {
+        console.error(`[Email Service] Error details: ${error.message}`);
+      }
+    }
+  }
+
+  async sendDiagnosisReportEmail(
+    recipientEmail: string,
+    patientName: string,
+    pdfBuffer: Buffer,
+    fileName: string
+  ): Promise<void> {
+    const subject = `Informe Diagnóstico de ${patientName} - Sofia Medical Dashboard`;
+    const content = `
+      <p style="color: #374151; font-size: 16px; margin: 0 0 24px 0;">
+        Estimado/a,
+      </p>
+      <p style="color: #374151; font-size: 16px; margin: 0 0 24px 0;">
+        Adjunto encontrará el informe diagnóstico de <strong style="color: #1f2937;">${patientName}</strong>.
+      </p>
+      <p style="color: #374151; font-size: 16px; margin: 0 0 24px 0;">
+        Este documento contiene las últimas diagnosis y detalles relevantes.
+      </p>
+      <p style="color: #6b7280; font-size: 14px; margin: 24px 0 0 0;">
+        Si tiene alguna pregunta o necesita ayuda, no dude en contactar a nuestro equipo de soporte.
+      </p>
+    `;
+
+    const html = this.getEmailTemplate(
+      'Informe Diagnóstico Disponible',
+      content,
+      undefined,
+      undefined,
+      'success'
+    );
+
+    try {
+      const info = await this.transporter.sendMail({
+        from: this.fromEmail,
+        to: recipientEmail,
+        subject: subject,
+        html: html,
+        attachments: [
+          {
+            filename: fileName,
+            content: pdfBuffer,
+            contentType: 'application/pdf',
+          },
+        ],
+      });
+      console.log(`[Email Service] Informe diagnóstico enviado a ${recipientEmail}. Message ID: ${info.messageId}`);
+      console.log(`[Email Service] Preview URL (if using Ethereal): ${nodemailer.getTestMessageUrl(info)}`);
+    } catch (error) {
+      console.error(`[Email Service] Error al enviar informe diagnóstico a ${recipientEmail}:`, error);
       if (error instanceof Error) {
         console.error(`[Email Service] Error details: ${error.message}`);
       }

@@ -8,29 +8,7 @@ import { useRouter } from "next/navigation";
 import Swal from 'sweetalert2';
 import { toast } from "sonner";
 
-// ... (interfaz User actualizada) ...
-export interface User {
-  id_usuario: number;
-  id_tipo_documento: number;
-  id_pais: number;
-  nui: string;
-  primer_nombre: string;
-  segundo_nombre: string | null;
-  primer_apellido: string;
-  segundo_apellido: string | null;
-  correo: string;
-  fecha_registro: string;
-  ultima_actividad: string | null;
-  estado: string;
-  firebase_uid: string;
-  rol?: string;
-  roles: string[];
-  mfa_enabled?: boolean;
-  // Campos para médicos
-  id_especialidad?: number;
-  numero_tarjeta_profesional?: string;
-  años_experiencia?: number;
-}
+import { User } from "../lib/types"; // Importar la interfaz User centralizada
 
 
 // ... (interfaz AuthContextProps sin cambios) ...

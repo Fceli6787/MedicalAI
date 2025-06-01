@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
 import { Activity, Users, Clock, BarChart3, TrendingUp, AlertTriangle, Loader2, PieChartIcon } from "lucide-react"
 import { AuthContext } from "../../context/AuthContext"
+import { User } from "../../lib/types"; // Importar la interfaz User centralizada
 import {
     ChartContainer,
     ChartTooltip,
@@ -16,13 +17,19 @@ import {
     Bar,
     BarChart,
     Pie,
-    PieChart as RechartsPieChart,
+    PieChart, // Corregido de RechartsPieChart a PieChart
     ResponsiveContainer,
     XAxis,
     YAxis,
     CartesianGrid,
     Cell
 } from "recharts"
+// Importar los nuevos componentes y hook
+import { OnboardingTourDialog } from "@/components/onboarding-tour-dialog";
+import { FeedbackModal } from "@/components/feedback-modal";
+import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
+import { useToast } from "../../components/ui/use-toast";
+
 import dayjs from 'dayjs';
 import 'dayjs/locale/es';
 dayjs.locale('es');
@@ -85,53 +92,161 @@ const CHART_COLORS = {
   ],
 };
 
-export default function DashboardPage() {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error("useAuth debe usarse dentro de un AuthProvider")
-  }
-  const { user } = context
+// Definición de los pasos del tour de onboarding
+// NOTA: Estos pasos se han movido al hook useOnboardingTour para centralizar la lógica.
+// Se mantienen aquí solo como referencia o si se necesitan para renderizado condicional.
+const onboardingSteps = [
+  {
+    title: "Bienvenido a Sofia Medical Dashboard",
+    description: "Esta guía rápida te ayudará a familiarizarte con las funciones clave de la plataforma. ¡Empecemos!",
+  },
+  {
+    title: "Métricas Clave",
+    description: "En la parte superior, encontrarás un resumen de métricas importantes como el total de diagnósticos, pacientes registrados y la precisión de la IA. Esto te da una visión general rápida del rendimiento.",
+  },
+  {
+    title: "Diagnósticos Recientes",
+    description: "La primera pestaña muestra tus diagnósticos más recientes. Aquí puedes ver rápidamente los últimos casos y su nivel de confianza.",
+  },
+  {
+    title: "Estadísticas Detalladas",
+    description: "La pestaña de 'Estadísticas' te ofrece gráficos interactivos sobre la distribución de diagnósticos por tipo de examen, pacientes por género y resultados generales. ¡Explora tus datos!",
+  },
+  {
+    title: "Navegación Lateral",
+    description: "Usa la barra lateral izquierda para navegar entre las diferentes secciones de la aplicación: Dashboard, Historial, Pacientes, Nuevo Diagnóstico y Configuración.",
+  },
+  {
+    title: "Gestión de Pacientes",
+    description: "En la sección 'Pacientes', puedes ver, añadir y gestionar la información de todos tus pacientes. ¡Pronto podrás importar pacientes en masa!",
+  },
+  {
+    title: "Creación de Diagnósticos",
+    description: "Ve a 'Nuevo Diagnóstico' para iniciar un nuevo análisis. Podrás subir imágenes y obtener diagnósticos asistidos por IA.",
+  },
+  {
+    title: "Configuración de Cuenta",
+    description: "En 'Configuración', puedes ajustar tus preferencias, gestionar tu perfil y configurar opciones de seguridad como la autenticación de dos factores (MFA).",
+  },
+  {
+    title: "¡Listo para Empezar!",
+    description: "Has completado el tour. Esperamos que esta guía te sea útil. ¡Ahora estás listo para explorar todas las funcionalidades de Sofia Medical Dashboard!",
+    isLastStep: true,
+  },
+];
 
-  const [diagnosticos, setDiagnosticos] = useState<Diagnostico[]>([])
-  const [pacientes, setPacientes] = useState<Paciente[]>([])
+
+export default function DashboardPage() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth debe usarse dentro de un AuthProvider");
+  }
+  const { user } = context;
+  const { toast } = useToast();
+
+  const [diagnosticos, setDiagnosticos] = useState<Diagnostico[]>([]);
+  const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null);
+
+  // Usar el custom hook para la lógica del tour
+  const {
+    showOnboardingTour,
+    currentTourStep,
+    onboardingSteps: tourStepsFromHook, // Renombrar para evitar conflicto con la constante local
+    handleNextTourStep,
+    handleSkipTour,
+    showFeedbackModal,
+    setShowFeedbackModal,
+  } = useOnboardingTour(user);
+
+  // Estado para el feedback (movido aquí desde el hook para que el componente lo maneje)
+  const [feedbackText, setFeedbackText] = useState("");
+  const [isSendingFeedback, setIsSendingFeedback] = useState(false);
 
   useEffect(() => {
-    const cargarDatos = async () => {
+    const loadDashboardData = async () => {
       setLoading(true);
       setError(null);
       try {
-        const [pacientesResponse, diagnosticosResponse] = await Promise.all([
-          fetch("/api/dashboard/pacientes"),
-          fetch("/api/dashboard/diagnosticos"),
-        ]);
+        if (user) { // Solo cargar datos si hay un usuario logueado
+          const [pacientesResponse, diagnosticosResponse] = await Promise.all([
+            fetch("/api/dashboard/pacientes"),
+            fetch("/api/dashboard/diagnosticos"),
+          ]);
 
-        if (!pacientesResponse.ok) throw new Error(`Error al cargar pacientes: ${pacientesResponse.statusText} (${pacientesResponse.status})`);
-        const pacientesData = await pacientesResponse.json();
-        setPacientes((pacientesData.pacientes || []).map((p: any) => ({
-            ...p,
-            fecha_registro_usuario: p.fecha_registro_usuario || p.fecha_registro
-        })));
+          if (!pacientesResponse.ok) throw new Error(`Error al cargar pacientes: ${pacientesResponse.statusText} (${pacientesResponse.status})`);
+          const pacientesData = await pacientesResponse.json();
+          setPacientes((pacientesData.pacientes || []).map((p: any) => ({
+              ...p,
+              fecha_registro_usuario: p.fecha_registro_usuario || p.fecha_registro
+          })));
 
-        if (!diagnosticosResponse.ok) throw new Error(`Error al cargar diagnósticos: ${diagnosticosResponse.statusText} (${diagnosticosResponse.status})`);
-        const diagnosticosData = await diagnosticosResponse.json();
-        setDiagnosticos(Array.isArray(diagnosticosData) ? diagnosticosData : []);
-
+          if (!diagnosticosResponse.ok) throw new Error(`Error al cargar diagnósticos: ${diagnosticosResponse.statusText} (${diagnosticosResponse.status})`);
+          const diagnosticosData = await diagnosticosResponse.json();
+          setDiagnosticos(Array.isArray(diagnosticosData) ? diagnosticosData : []);
+        } else {
+          setPacientes([]);
+          setDiagnosticos([]);
+        }
       } catch (error: any) {
         console.error("Error cargando datos del dashboard:", error);
         setError(error.message || "Error al cargar los datos del dashboard.");
       } finally {
         setLoading(false);
       }
+    };
+
+    loadDashboardData();
+  }, [user]); // Dependencia de 'user' para re-evaluar cuando el usuario cambia
+
+  const handleSendFeedback = async () => {
+    if (!feedbackText.trim()) {
+      toast({
+        title: "Retroalimentación vacía",
+        description: "Por favor, escribe algo antes de enviar tu retroalimentación.",
+        variant: "destructive",
+      });
+      return;
     }
 
-    if (user) {
-        cargarDatos();
-    } else {
-        setLoading(false);
+    setIsSendingFeedback(true);
+    try {
+      const response = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user?.id_usuario, // Asumiendo que el usuario tiene un id_usuario
+          feedback: feedbackText,
+          page: 'Dashboard Onboarding Tour',
+        }),
+      });
+
+      if (response.ok) {
+        toast({
+          title: "¡Gracias por tu retroalimentación!",
+          description: "Hemos recibido tus comentarios.",
+          variant: "success",
+        });
+        setShowFeedbackModal(false);
+        setFeedbackText("");
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Error desconocido al enviar retroalimentación.");
+      }
+    } catch (error: any) {
+      console.error("Error al enviar retroalimentación:", error);
+      toast({
+        title: "Error al enviar retroalimentación",
+        description: error.message || "Hubo un problema al enviar tus comentarios. Inténtalo de nuevo.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingFeedback(false);
     }
-  }, [user]);
+  };
 
   // Procesamiento de datos para gráficos
   const diagnosticosPorTipo: DiagnosticosPorTipoData = useMemo(() => {
@@ -253,6 +368,27 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 w-full px-4 sm:px-6 py-8 overflow-x-hidden">
+      {/* Componente del Tour de Onboarding */}
+      {showOnboardingTour && (
+        <OnboardingTourDialog
+          isOpen={showOnboardingTour}
+          onClose={() => handleSkipTour()} // Al cerrar el diálogo, se salta el tour
+          onNext={handleNextTourStep}
+          onSkip={handleSkipTour}
+          title={tourStepsFromHook[currentTourStep].title}
+          description={tourStepsFromHook[currentTourStep].description}
+          isLastStep={tourStepsFromHook[currentTourStep].isLastStep || false}
+        />
+      )}
+
+      {/* Componente del Modal de Retroalimentación */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        userId={user?.id_usuario}
+        pageContext="Dashboard Onboarding Tour"
+      />
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-800 dark:text-white">Dashboard Principal</h1>
@@ -408,7 +544,7 @@ export default function DashboardPage() {
                             {pacientesPorGenero.length > 0 ? (
                                 <ChartContainer config={{}} className="h-[300px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <RechartsPieChart>
+                                        <PieChart>
                                             <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
                                             <Pie data={pacientesPorGenero} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} labelLine={false} label={({ name, percent, value }) => `${name} (${value}) ${(percent * 100).toFixed(0)}%`}
                                                 style={{ fontSize: '10px' }}
@@ -418,7 +554,7 @@ export default function DashboardPage() {
                                                 ))}
                                             </Pie>
                                             <ChartLegend content={<ChartLegendContent nameKey="name" />} />
-                                        </RechartsPieChart>
+                                        </PieChart>
                                     </ResponsiveContainer>
                                 </ChartContainer>
                             ) : <p className="text-sm text-gray-500 text-center py-10">No hay datos suficientes para este gráfico.</p>}
@@ -438,7 +574,7 @@ export default function DashboardPage() {
                             {diagnosticosPorResultado.length > 0 ? (
                                 <ChartContainer config={{}} className="h-[300px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <RechartsPieChart>
+                                        <PieChart>
                                             <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
                                             <Pie data={diagnosticosPorResultado} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} labelLine={false} label={({ name, percent, value }) => `${(percent * 100).toFixed(0)}%`}
                                                 style={{ fontSize: '10px' }}
@@ -448,7 +584,7 @@ export default function DashboardPage() {
                                                 ))}
                                             </Pie>
                                             <ChartLegend content={<ChartLegendContent nameKey="name" />} />
-                                        </RechartsPieChart>
+                                        </PieChart>
                                     </ResponsiveContainer>
                                 </ChartContainer>
                             ) : <p className="text-sm text-gray-500 text-center py-10">No hay datos suficientes para este gráfico.</p>}
