@@ -18,6 +18,9 @@ import { useToast } from "@/components/ui/use-toast";
 import Swal from 'sweetalert2';
 
 interface BulkUploadDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  
   onUploadSuccess: () => void;
 }
 

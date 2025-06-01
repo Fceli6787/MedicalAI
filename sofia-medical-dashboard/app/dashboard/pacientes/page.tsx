@@ -29,7 +29,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Search, Edit, Trash2, FileText, ChevronLeft, ChevronRight, UserPlus, AlertCircle, Loader2, CalendarIcon } from "lucide-react"
+import { Search, Edit, Trash2, FileText, ChevronLeft, ChevronRight, UserPlus, AlertCircle, Loader2, CalendarIcon, UploadCloud } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -92,7 +92,7 @@ const initialPatientFormState = {
 
 type PatientFormData = typeof initialPatientFormState;
 
-// Funciones de utilidad para fechas (ya estaban fuera, lo cual es bueno)
+// Funciones de utilidad para fechas
 const normalizeAndGetDateObject = (dateInput: string | number | Date | null | undefined): dayjs.Dayjs | null => {
     if (!dateInput) return null;
     let djsInstance: dayjs.Dayjs;
@@ -121,7 +121,7 @@ const formatDisplayDate = (dateInput: string | number | Date | null | undefined)
     try { return dateObj.format('DD/MM/YYYY'); }
     catch (e) { console.error("Error in formatDisplayDate formatting with dayjs:", dateInput, e); return "Fecha inválida"; }
 };
-  
+
 const formatDateForInput = (dateInput: string | number | Date | null | undefined): string => {
     const dateObj = normalizeAndGetDateObject(dateInput);
     if (!dateObj) return "";
@@ -129,8 +129,7 @@ const formatDateForInput = (dateInput: string | number | Date | null | undefined
     catch (e) { console.error("Error in formatDateForInput formatting with dayjs:", dateInput, e); return ""; }
 };
 
-
-// 1. Mover PatientFormFields FUERA de PacientesPage y memoizarlo
+// Formulario de paciente memoizado
 type PatientFormFieldsProps = {
   formData: PatientFormData;
   handleInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -146,58 +145,70 @@ const PatientFormFields = memo(({
 }: PatientFormFieldsProps) => {
   // El contenido de PatientFormFields es el mismo que antes
   return (
-    <div className="grid gap-6 py-4">
-        {/* Grid for names */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-2">
-                <Label htmlFor="primer_nombre" className="dark:text-gray-300">Primer Nombre <span className="text-red-500">*</span></Label>
-                <Input 
-                    id="primer_nombre" 
-                    value={formData.primer_nombre} 
-                    onChange={handleInputChange} 
-                    placeholder="Ingrese el primer nombre" 
-                    required 
-                    className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
-                />
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="segundo_nombre" className="dark:text-gray-300">Segundo Nombre</Label>
-                <Input 
-                    id="segundo_nombre" 
-                    value={formData.segundo_nombre || ""} 
-                    onChange={handleInputChange} 
-                    placeholder="Ingrese el segundo nombre" 
-                    className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
-                />
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="primer_apellido" className="dark:text-gray-300">Primer Apellido <span className="text-red-500">*</span></Label>
-                <Input 
-                    id="primer_apellido" 
-                    value={formData.primer_apellido} 
-                    onChange={handleInputChange} 
-                    placeholder="Ingrese el primer apellido" 
-                    required 
-                    className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
-                />
-            </div>
-        </div>
-        {/* Second last name */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> {/* Ajustado a sm:grid-cols-1 si solo es un campo o mantener sm:grid-cols-2 y añadir un placeholder si es necesario */}
-            <div className="space-y-2">
-                <Label htmlFor="segundo_apellido" className="dark:text-gray-300">Segundo Apellido</Label>
-                <Input 
-                    id="segundo_apellido" 
-                    value={formData.segundo_apellido || ""} 
-                    onChange={handleInputChange} 
-                    placeholder="Ingrese el segundo apellido" 
-                    className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
-                />
-            </div>
-            {/* Puedes agregar un div vacío o un campo diferente aquí si quieres mantener la estructura de 2 columnas */}
-             <div className="space-y-2 hidden sm:block"> {/* Espacio reservado para mantener diseño, opcional */}
-            </div>
-        </div>
+  <div className="grid gap-6 py-4">
+    {/* Grid for names */}
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="primer_nombre" className="dark:text-gray-300">
+          Primer Nombre <span className="text-red-500">*</span>
+        </Label>
+        <Input
+          id="primer_nombre"
+          value={formData.primer_nombre}
+          onChange={handleInputChange}
+          placeholder="Ingrese el primer nombre"
+          required
+          className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="segundo_nombre" className="dark:text-gray-300">Segundo Nombre</Label>
+        <Input
+          id="segundo_nombre"
+          value={formData.segundo_nombre || ""}
+          onChange={handleInputChange}
+          placeholder="Ingrese el segundo nombre"
+          className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="primer_apellido" className="dark:text-gray-300">
+          Primer Apellido <span className="text-red-500">*</span>
+        </Label>
+        <Input
+          id="primer_apellido"
+          value={formData.primer_apellido}
+          onChange={handleInputChange}
+          placeholder="Ingrese el primer apellido"
+          required
+          className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+        />
+      </div>
+    </div>
+
+    {/* Segundo Apellido */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="segundo_apellido" className="dark:text-gray-300">Segundo Apellido</Label>
+        <Input
+          id="segundo_apellido"
+          value={formData.segundo_apellido || ""}
+          onChange={handleInputChange}
+          placeholder="Ingrese el segundo apellido"
+          className="dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+        />
+      </div>
+      <div className="space-y-2 hidden sm:block" />
+    </div>
+
+    {/* INICIO: Indicación sobre carga masiva */}
+    <div className="space-y-2">
+      <Label className="dark:text-gray-300">¿Desea registrar varios pacientes?</Label>
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        Puede hacerlo desde el botón <strong>“Carga Masiva”</strong> ubicado en la parte superior derecha de la vista principal de pacientes. Allí podrá subir un archivo <code>.csv</code> con múltiples registros.
+      </p>
+    </div>
+    {/* FIN: Indicación sobre carga masiva */}
         {/* Document Type, NUI, Country */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
@@ -583,6 +594,8 @@ export default function PacientesPage() {
     }
   };
 
+  const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false);
+
   const handleEditingPatientInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target as { id: keyof PatientFormData, value: string };
     setEditingPatientFormData((prev) => ({ ...prev, [id]: value }));
@@ -650,49 +663,57 @@ export default function PacientesPage() {
   return (
     <div className="p-6 space-y-6 w-full bg-white dark:bg-gray-900 min-h-screen">
       {/* Header y Botón "Nuevo Paciente" */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Gestión de Pacientes</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Administre la información y registros de sus pacientes.</p>
-        </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600 w-full sm:w-auto">
-              <UserPlus className="mr-2 h-4 w-4" /> Nuevo Paciente
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
-            <DialogHeader>
-              <DialogTitle className="dark:text-white">Agregar Nuevo Paciente</DialogTitle>
-              <DialogDescription className="dark:text-gray-400">Complete los detalles. Haga clic en guardar al finalizar.</DialogDescription>
-            </DialogHeader>
-            <PatientFormFields
-                formData={newPatient}
-                handleInputChange={handleNewPatientInputChange}
-                handleSelectChange={handleNewPatientSelectChange}
-                handleDateChange={handleNewPatientDateChange} // Actualizado para usar la función memoizada
-            />
-            <DialogFooter className="dark:border-t dark:border-gray-700 pt-4">
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Cancelar</Button>
-              <Button
-                onClick={handleAddPatientSubmit}
-                className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600"
-                disabled={
-                  isSavingAddData ||
-                  !newPatient.primer_nombre?.trim() ||
-                  !newPatient.primer_apellido?.trim() ||
-                  !newPatient.tipoDocumentoCodigo ||
-                  !newPatient.paisCodigo ||
-                  !newPatient.email?.trim() ||
-                  !newPatient.nui?.trim()
-                }
-              >
-                {isSavingAddData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Guardar Paciente
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+<div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+  <div>
+    <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Gestión de Pacientes</h1>
+    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Administre la información y registros de sus pacientes.</p>
+  </div>
+  {/* Botones alineados horizontalmente */}
+  <div className="flex gap-2">
+    <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+      <DialogTrigger asChild>
+        <Button className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600 w-full sm:w-auto">
+          <UserPlus className="mr-2 h-4 w-4" /> Nuevo Paciente
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
+        <DialogHeader>
+          <DialogTitle className="dark:text-white">Agregar Nuevo Paciente</DialogTitle>
+          <DialogDescription className="dark:text-gray-400">Complete los detalles. Haga clic en guardar al finalizar.</DialogDescription>
+        </DialogHeader>
+        <PatientFormFields
+          formData={newPatient}
+          handleInputChange={handleNewPatientInputChange}
+          handleSelectChange={handleNewPatientSelectChange}
+          handleDateChange={handleNewPatientDateChange}
+        />
+        <DialogFooter className="dark:border-t dark:border-gray-700 pt-4">
+          <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Cancelar</Button>
+          <Button
+            onClick={handleAddPatientSubmit}
+            className="bg-teal-600 hover:bg-teal-700 text-white dark:bg-teal-700 dark:hover:bg-teal-600"
+            disabled={
+              isSavingAddData ||
+              !newPatient.primer_nombre?.trim() ||
+              !newPatient.primer_apellido?.trim() ||
+              !newPatient.tipoDocumentoCodigo ||
+              !newPatient.paisCodigo ||
+              !newPatient.email?.trim() ||
+              !newPatient.nui?.trim()
+            }
+          >
+            {isSavingAddData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Guardar Paciente
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <BulkUploadDialog
+      open={isBulkDialogOpen}
+      onOpenChange={setIsBulkDialogOpen}
+      onUploadSuccess={fetchData}
+    />
+  </div>
+</div>
 
       {/* Diálogo para Editar Paciente */}
       <Dialog open={isEditDialogOpen} onOpenChange={(isOpen) => {
@@ -819,6 +840,7 @@ export default function PacientesPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+      
     </div>
   )
 }

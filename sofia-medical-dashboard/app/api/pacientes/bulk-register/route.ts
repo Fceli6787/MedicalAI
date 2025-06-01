@@ -84,12 +84,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'No se encontraron registros en el archivo CSV.' }, { status: 200 });
     }
 
-    const pacienteRepo = await getPacienteRepositoryInstance();
-    const results: { successful: SuccessfulRecord[]; failed: FailedRecord[] } = {
-      successful: [],
-      failed: [],
-    };
-
+    // --- VALIDACIÓN GLOBAL ---
+    const validationResults: { record: any, errors: string[] }[] = [];
     for (const record of records) {
       const { nombre, id, contacto, fecha_nacimiento, genero, direccion, grupo_sanguineo, ocupacion, info_seguro, contacto_emergencia, alergias, antecedentes_medicos, historial_visitas } = record;
       const errors: string[] = [];
@@ -111,26 +107,50 @@ export async function POST(request: NextRequest) {
       }
 
       // Validación de fecha de nacimiento
-      let parsedFechaNacimiento: Date | null = null;
       if (fecha_nacimiento) {
         if (!isValidDate(fecha_nacimiento)) {
           errors.push('El campo "fecha_nacimiento" debe ser una fecha válida (YYYY-MM-DD).');
-        } else {
-          parsedFechaNacimiento = new Date(fecha_nacimiento);
         }
       }
 
       // Validación de género
-      const validGenders = ['Masculino', 'Femenino', 'Otro', 'No especificado']; // Asumiendo valores válidos
+      const validGenders = ['Masculino', 'Femenino', 'Otro', 'No especificado'];
       if (genero && !validGenders.includes(genero)) {
         errors.push(`El campo "genero" debe ser uno de: ${validGenders.join(', ')}.`);
       }
 
-      // Si hay errores de validación, registrar como fallido y continuar
-      if (errors.length > 0) {
-        results.failed.push({ record, reason: 'Errores de validación de datos.', errors });
-        continue;
-      }
+      validationResults.push({ record, errors });
+    }
+
+    // Si hay algún error, NO guardar nada y devolver todos los errores
+    const failed = validationResults.filter(r => r.errors.length > 0);
+    if (failed.length > 0) {
+      return NextResponse.json({
+        message: 'Errores de validación en uno o más registros. No se guardó ningún paciente.',
+        summary: {
+          successfulCount: 0,
+          failedCount: failed.length,
+        },
+        details: {
+          successful: [],
+          failed: failed.map(f => ({
+            record: f.record,
+            reason: 'Errores de validación de datos.',
+            errors: f.errors,
+          })),
+        },
+      }, { status: 200 });
+    }
+
+    // --- SI TODOS SON VÁLIDOS, INSERTAR ---
+    const pacienteRepo = await getPacienteRepositoryInstance();
+    const results: { successful: SuccessfulRecord[]; failed: FailedRecord[] } = {
+      successful: [],
+      failed: [],
+    };
+
+    for (const { record } of validationResults) {
+      const { nombre, id, contacto, fecha_nacimiento, genero, direccion, grupo_sanguineo, ocupacion, info_seguro, contacto_emergencia, alergias, antecedentes_medicos, historial_visitas } = record;
 
       try {
         const [primer_nombre, ...restOfName] = nombre.split(' ');
@@ -140,21 +160,28 @@ export async function POST(request: NextRequest) {
 
         // Valores por defecto para tipo de documento y país
         const defaultTipoDocumentoCodigo = 'CC'; // Cédula de Ciudadanía
-        const defaultPaisCodigo = 'CO'; // Colombia
+        const defaultPaisCodigo = 'COL'; // Colombia
 
         const pacienteUserData: PacienteUserData = {
           nui: id,
           primer_nombre: primer_nombre || '',
           primer_apellido: primer_apellido || '',
-          email: email || `temp_${id}@example.com`, // Email es requerido por PacienteUserData
+          email: email || `temp_${id}@example.com`,
           tipoDocumentoCodigo: defaultTipoDocumentoCodigo,
           paisCodigo: defaultPaisCodigo,
           estado: 'Activo',
           roles: ['paciente'],
         };
 
+        let parsedFechaNacimiento: Date | null = null;
+        if (fecha_nacimiento && isValidDate(fecha_nacimiento)) {
+          parsedFechaNacimiento = new Date(fecha_nacimiento);
+        }
+
         const pacienteDetails: PacienteDetails = {
-          fecha_nacimiento: parsedFechaNacimiento, // Usar la fecha parseada
+          fecha_nacimiento: parsedFechaNacimiento
+            ? parsedFechaNacimiento.toISOString().slice(0, 10)
+            : null,
           genero: genero || null,
           telefono_contacto: telefono_contacto || null,
           direccion_residencial: direccion || null,
@@ -172,7 +199,7 @@ export async function POST(request: NextRequest) {
         console.log(`[API POST /api/pacientes/bulk-register] - Paciente ${nombre} (${id}) registrado con ID: ${newPatientId}`);
       } catch (insertError: any) {
         console.error(`[API POST /api/pacientes/bulk-register] - Error al insertar paciente ${nombre} (${id}):`, insertError);
-        results.failed.push({ record, reason: insertError.message, errors: [insertError.message] }); // Asegurar que 'errors' esté presente
+        results.failed.push({ record, reason: insertError.message, errors: [insertError.message] });
       }
     }
 
