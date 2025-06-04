@@ -564,6 +564,23 @@ export default function HistorialPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                onClick={handleDownloadPDFFromModal}
+                                className="h-8 w-8 text-gray-500 hover:text-teal-600 hover:bg-teal-50 rounded-md dark:text-gray-400 dark:hover:text-teal-400 dark:hover:bg-gray-700"
+                                title="Descargar PDF"
+                                disabled={pdfLoading}
+                              >
+                                
+                  		          {pdfLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileDown className="h-4 w-4 mr-2" />
+                )}
+                
+              </Button>
+
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 onClick={() => handleDeleteDiagnostico(diag.id_diagnostico)}
                                 className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-gray-700"
                                 title="Eliminar Diagnóstico"
@@ -676,7 +693,7 @@ export default function HistorialPage() {
                   </CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-sm dark:text-gray-200">
                     <div><strong>ID Diagnóstico:</strong> <Badge variant="outline" className="dark:border-gray-600 dark:text-gray-200">{selectedDiagnostico.id_diagnostico}</Badge></div>
-                    <div><strong>Estado:</strong> <Badge variant={selectedDiagnostico.estado_diagnostico === 'Completado' ? 'default' : selectedDiagnostico.estado_diagnostico === 'Pendiente' ? 'secondary' : 'destructive'} className={`${selectedDiagnostico.estado_diagnostico === 'Completado' ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-300' : selectedDiagnostico.estado_diagnostico === 'Pendiente' ? 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-800 dark:text-yellow-300 dark:border-yellow-600' : 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300'}`}>{selectedDiagnostico.estado_diagnostico}</Badge></div>
+                    <div><strong>Estado:</strong> <Badge variant={selectedDiagnostico.estado_diagnostico === 'Completado' ? 'default' : selectedDiagnostico.estado_diagnostico === 'Pendiente' ? 'secondary' : 'destructive'} className={`${selectedDiagnostico.estado_diagnostico === 'Completado' ? 'bg-green-100 text-green-600 dark:bg-green-700 dark:text-green-300' : selectedDiagnostico.estado_diagnostico === 'Pendiente' ? 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-800 dark:text-yellow-300 dark:border-yellow-600' : 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300'}`}>{selectedDiagnostico.estado_diagnostico}</Badge></div>
                     <div><strong>Paciente:</strong> {selectedDiagnostico.nombre_paciente || "N/A"} (NUI: {selectedDiagnostico.nui_paciente || "N/A"})</div>
                     <div><strong>Médico:</strong> {selectedDiagnostico.nombre_medico || "N/A"}</div>
                     <div><strong>Tipo de Examen:</strong> {selectedDiagnostico.nombre_tipo_examen || "N/A"}</div>
