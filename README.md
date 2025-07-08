@@ -106,4 +106,5 @@ Sigue estos pasos para poner en marcha el proyecto:
 *   **Desarrolladores:** Juan Blanco, Michael Romero
 *   **Desarrollador Backend:** Jheison Sosa
 *   **Desarrollador Frontend:** Andres Celi
-*   **(Antes) Ingeniero de Calidad de Software (QA), Ahora (Desarrollador):** Cristian Zabala
+*   **(Desarrollador):** Cristian Zabala
+*   Cada uno fue QA de cada trabajo que se le asigno
