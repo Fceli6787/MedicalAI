@@ -100,11 +100,4 @@ Sigue estos pasos para poner en marcha el proyecto:
 
 ## 👥 Integrantes del Proyecto
 
-*   **Project Leader:** Jaider Rodríguez
-*   **Arquitecto de Software:** Marlon González
-*   **SCRUM Master:** María Murcia
-*   **Desarrolladores:** Juan Blanco, Michael Romero
-*   **Desarrollador Backend:** Jheison Sosa
-*   **Desarrollador Frontend:** Andres Celi
-*   **(Desarrollador):** Cristian Zabala
-*   Cada uno fue QA de cada trabajo que se le asigno
+Andres Felipe Celi Jimenez
