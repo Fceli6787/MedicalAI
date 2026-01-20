@@ -164,8 +164,8 @@ importers:
         specifier: ^4.1.1
         version: 4.1.1
       jspdf:
-        specifier: ^3.0.4
-        version: 3.0.4
+        specifier: ^4.0.0
+        version: 4.0.0
       lucide-react:
         specifier: ^0.454.0
         version: 0.454.0(react@19.2.3)
@@ -3295,7 +3295,7 @@ packages:
     peerDependencies:
       preact: '>=10'
 
-  preact@10.28.0:
+  preact@10.28.2:
     resolution: {integrity: sha512-rytDAoiXr3+t6OIP3WGlDd0ouCUG1iCWzkcY3++Nreuoi17y6T5i/zRhe6uYfoVcxq6YU+sBtJouuRDsq8vvqA==}
 
   pretty-format@29.7.0:
